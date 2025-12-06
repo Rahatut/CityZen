@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "MyExpoApp",
+    "slug": "my-expo-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "sdkVersion": "51.0.0"
+  }
+}
