@@ -9,11 +9,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Screen components (native-friendly screens)
 // Native (JS) screen implementations
-import LoginScreenNative from './src/screens/LoginScreen';
-import HomeScreenNative from './src/screens/HomeScreen';
-import SubmitComplaintScreenNative from './src/screens/SubmitComplaintScreen';
-import FeedScreenNative from './src/screens/FeedScreen';
-import ProfileScreenNative from './src/screens/ProfileScreen';
+import LoginScreenNative from './src/screens/LoginScreen.js';
+import HomeScreenNative from './src/screens/HomeScreen.js';
+import SubmitComplaintScreenNative from './src/screens/SubmitComplaintScreen.js';
+import FeedScreenNative from './src/screens/FeedScreen.js';
+import ProfileScreenNative from './src/screens/ProfileScreen.js';
 
 // Web (JSX) components
 import LoginComponent from './src/components/Login.jsx';
