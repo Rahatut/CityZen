@@ -10,13 +10,14 @@ const cors = require('cors');
 
 // CRITICAL CHANGE 1: Import sequelize from the models/index file
 // This ensures all User, Citizen, Authority, and Admin models are loaded with associations.
-const { sequelize } = require('./models'); 
+const { sequelize, Category } = require('./models'); 
 const logger = require('./utils/logger');
 const env = require('./config/env');
 // REMOVED: const sequelize = require('./config/database'); // Redundant after CRITICAL CHANGE 1
 // REMOVED: const initFirebase = require('./config/firebase'); // Not needed for this client-auth flow
 
 const authRoutes = require('./routes/authRoutes');
+const complaintRoutes = require('./routes/complaintRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 async function startServer() {
@@ -37,6 +38,24 @@ async function startServer() {
 		// and their foreign key relationships when the server starts.
 		await sequelize.sync({ alter: true }); 
 		logger.info("Models synced");
+
+		const categoriesToSeed = [
+			{ name: 'Roads & Transport', description: 'Issues related to roads, traffic, and public transportation.' },
+			{ name: 'Garbage & Waste Management', description: 'Issues related to waste collection, illegal dumping, and recycling.' },
+			{ name: 'Streetlights & Electrical', description: 'Issues related to streetlights, power outages, and electrical hazards.' },
+			{ name: 'Water Supply & Drains', description: 'Issues related to water supply, sewage, and drainage systems.' },
+			{ name: 'Buildings & Infrastructure', description: 'Issues related to public buildings, bridges, and other infrastructure.' },
+			{ name: 'Environment & Public Spaces', description: 'Issues related to parks, green spaces, pollution, and environmental quality.' }
+		];
+
+		for (const categoryData of categoriesToSeed) {
+			await Category.findOrCreate({
+				where: { name: categoryData.name },
+				defaults: categoryData
+			});
+		}
+		logger.info("Categories seeded");
+
 	} catch (err) {
 		logger.error("Database connection failed:", err.message);
 	}
@@ -63,6 +82,7 @@ async function startServer() {
     // CRITICAL CHANGE 3: Changed route mounting from '/api/auth' to '/api'
     // This correctly maps the frontend call (POST /api/users) to the route defined in authRoutes.js
 	app.use('/api', authRoutes); 
+	app.use('/api', complaintRoutes);
 
 	// Static folder
 	app.use('/public', express.static(path.join(__dirname, 'public')));
