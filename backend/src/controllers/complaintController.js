@@ -13,9 +13,9 @@ exports.createComplaint = async (req, res) => {
       categoryId,
     } = req.body;
 
-    const imageFile = req.file;
+    const imageFiles = req.files; // Multer makes the uploaded files available here as an array
 
-    if (!title || !latitude || !longitude || !citizenUid || !categoryId || !imageFile) {
+    if (!title || !latitude || !longitude || !citizenUid || !categoryId || !imageFiles || imageFiles.length === 0) {
       return res.status(400).json({ message: 'Missing required complaint fields or image data.' });
     }
 
@@ -29,20 +29,21 @@ exports.createComplaint = async (req, res) => {
       currentStatus: 'pending'
     }, { transaction: t });
 
-    // Supabase Storage integration
-    if (imageFile) {
-      const bucketName = 'cityzen-media'; // TODO: Replace with your actual Supabase bucket name
+    // Supabase Storage integration for multiple images
+    const bucketName = 'cityzen-media'; // TODO: Replace with your actual Supabase bucket name
+
+    for (const imageFile of imageFiles) {
       const filePath = `complaint_images/${complaint.id}_${Date.now()}_${imageFile.originalname}`;
 
       const { data, error } = await supabase.storage
         .from(bucketName)
         .upload(filePath, imageFile.buffer, {
           contentType: imageFile.mimetype,
-          upsert: false, // Set to true if you want to overwrite existing files with the same name
+          upsert: false,
         });
 
       if (error) {
-        throw new Error(`Supabase upload failed: ${error.message}`);
+        throw new Error(`Supabase upload failed for ${imageFile.originalname}: ${error.message}`);
       }
 
       // Get public URL
@@ -51,10 +52,10 @@ exports.createComplaint = async (req, res) => {
         .getPublicUrl(filePath);
 
       if (publicUrlError) {
-        throw new Error(`Supabase getPublicUrl failed: ${publicUrlError.message}`);
+        throw new Error(`Supabase getPublicUrl failed for ${imageFile.originalname}: ${publicUrlError.message}`);
       }
       if (!publicUrlData || !publicUrlData.publicUrl) {
-        throw new Error(`Supabase getPublicUrl returned invalid data: ${JSON.stringify(publicUrlData)}`);
+        throw new Error(`Supabase getPublicUrl returned invalid data for ${imageFile.originalname}: ${JSON.stringify(publicUrlData)}`);
       }
 
       const imageUrl = publicUrlData.publicUrl;
@@ -65,8 +66,8 @@ exports.createComplaint = async (req, res) => {
       }
 
       await ComplaintImages.create({
-        complaintId: complaint.id,
-        imageURL: imageUrl,
+        complaintId: complaint.id, // Matches new model casing
+        imageURL: imageUrl,        // Matches new model casing
       }, { transaction: t });
     }
 

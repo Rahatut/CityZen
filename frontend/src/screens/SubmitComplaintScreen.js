@@ -1,19 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Image, Alert } from 'react-native';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 
-import { Camera, Image as ImageIcon, MapPin, Sparkles, Trash2, ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle, Shield, PlusIcon } from 'lucide-react-native';
+import { Camera, Image as ImageIcon, MapPin, Sparkles, Trash2, ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle, Shield } from 'lucide-react-native';
 import * as ImagePicker from "expo-image-picker";
 import * as Location from 'expo-location';
+import * as FileSystem from 'expo-file-system';
+import axios from 'axios';
+import { auth } from '../config/firebase';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 
 export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [image, setImage] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null); // Changed to store object {id, name}
+  const [categories, setCategories] = useState([]); // New state for fetched categories
+  const [images, setImages] = useState([]); // Changed to array for multiple images
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
   
   const [location, setLocation] = useState({ latitude: null, longitude: null, fullAddress: null,});
@@ -27,11 +33,22 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const categories = [
-    'Roads & Highways', 'WASA (Water)', 'DESCO/DPDC (Power)', 
-    'Waste Management', 'Public Safety', 'Drainage', 'Others'
-  ];
-
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/api/complaints/categories`, {
+          headers: {
+            'bypass-tunnel-reminder': 'true'
+          }
+        });
+        setCategories(response.data);
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        Alert.alert('Error', 'Failed to load categories.');
+      }
+    };
+    fetchCategories();
+  }, []);
 
   //Permissions
   const requestLocationPermission = async () => {
@@ -48,7 +65,7 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
     return true;
   };
 
-  const requestLibraryPermission = async () => {
+  const requestLibraryPermission = async () => { // New permission request
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       alert('Permission to access media library is required!');
@@ -134,9 +151,10 @@ const updateLocationWithAddress = async (latitude, longitude) => {
       exif: true,
     });
 
+    // Camera
     if (result.assets?.length > 0) {
       const asset = result.assets[0];
-      setImage(prev => [...prev, ...result.assets.map(a => a.uri)]);
+      setImages(prev => [...prev, asset.uri]); // Append new image to array
 
       const exifLocation = extractLocationFromExif(asset.exif);
       if (exifLocation) {
@@ -149,7 +167,7 @@ const updateLocationWithAddress = async (latitude, longitude) => {
     }
   };
 
-  const handleLibraryPick = async () => {
+  const handleLibraryPick = async () => { // New function for picking from library
     const hasPermission = await requestLibraryPermission();
     const locPerm = await requestLocationPermission();
     if (!locPerm || !hasPermission) return;
@@ -158,13 +176,13 @@ const updateLocationWithAddress = async (latitude, longitude) => {
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,  
       quality: 1,
-      allowsMultipleSelection: true,
+      allowsMultipleSelection: true, // Allow multiple selections
       exif: true, 
     });
 
     if (result.assets?.length > 0) {
       const asset = result.assets[0];
-      setImage(prev => [...prev, ...result.assets.map(a => a.uri)]);
+      setImages(prev => [...prev, ...result.assets.map(a => a.uri)]); // Append new images to array
 
       const exifLocation = extractLocationFromExif(asset.exif);
       if (exifLocation) {
@@ -177,42 +195,85 @@ const updateLocationWithAddress = async (latitude, longitude) => {
     }
   };
 
-  const handleGPSDetect = async () => {
-    setLocating(true);
-    try {
-      const hasLocationPerm = await requestLocationPermission();
-      if (!hasLocationPerm) throw new Error('Location permission denied');
+      const handleGPSDetect = async () => {
+        setLocating(true);
+        try {
+          const hasLocationPerm = await requestLocationPermission();
+          if (!hasLocationPerm) throw new Error('Location permission denied');
 
-      const gps = await Location.getCurrentPositionAsync({});
-      await updateLocationWithAddress(gps.coords.latitude, gps.coords.longitude);
-    } catch (err) {
-      Alert.alert('Error', 'Unable to detect location.');
-    } finally {
-      setLocating(false);
-    }
-  };
+          const gps = await Location.getCurrentPositionAsync({});
+          await updateLocationWithAddress(gps.coords.latitude, gps.coords.longitude);
+        } catch (err) {
+          Alert.alert('Error', 'Unable to detect location.');
+        } finally {
+          setLocating(false);
+        }
+      };
 
-  const handleSubmit = () => {
-    const newErrors = {};
-    if (image.length === 0) newErrors.image = 'Evidence photo is mandatory.';
-    if (!title) newErrors.title = 'Title is required.';
-    if (!selectedCategory) newErrors.category = 'Category is required.';
-    if (!location.latitude || !location.longitude) newErrors.location = 'GPS location is required.';
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      Alert.alert('Missing Info', 'Please fill in all required fields.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      Alert.alert("Success", "Complaint Submitted Successfully!");
-      navigation.navigate('Feed');
-    }, 2000);
-  };
-
+      const handleSubmit = async () => {
+      const newErrors = {};
+      if (images.length === 0) newErrors.image = 'Evidence photos are mandatory.'; // Update validation
+      if (!title) newErrors.title = 'Title is required.';
+      if (!selectedCategory) newErrors.category = 'Category is required.';
+      if (!location.latitude || !location.longitude) newErrors.location = 'GPS location is required.';
+  
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
+        Alert.alert('Missing Info', 'Please fill in all required fields.');
+        return;
+      }
+  
+      setIsSubmitting(true);
+      setErrors({});
+  
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('description', description);
+      formData.append('latitude', location.latitude);
+      formData.append('longitude', location.longitude);
+      formData.append('citizenUid', auth.currentUser?.uid);
+      formData.append('categoryId', selectedCategory.id);
+  
+      if (!auth.currentUser?.uid) {
+        Alert.alert('Error', 'Could not identify user. Please log in again.');
+        setIsSubmitting(false);
+        return;
+      }
+  
+      // Loop through multiple images and append to FormData
+      images.forEach((imageUri, index) => {
+        const filename = imageUri.split('/').pop();
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image`;
+        formData.append('images', { // Append each image with the field name 'images'
+          uri: imageUri,
+          name: filename,
+          type: type,
+        });
+      });
+      
+      try {
+        const response = await axios.post(`${API_URL}/api/complaints`, formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'bypass-tunnel-reminder': 'true'
+          }
+        });
+  
+        if (response.status === 201) {
+          Alert.alert("Success", "Complaint Submitted Successfully!");
+          navigation.navigate('Feed');
+        } else {
+          Alert.alert('Error', 'Failed to submit complaint. Please try again.');
+        }
+      } catch (error) {
+        console.error('Submit Complaint Error:', error);
+        const message = error.response?.data?.message || 'An unexpected error occurred.';
+        Alert.alert('Submission Failed', message);
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
@@ -223,14 +284,14 @@ const updateLocationWithAddress = async (latitude, longitude) => {
         <View style={[styles.card, darkMode && styles.cardDark]}>
            
            {/* 1. Image Upload (Mandatory) */}
-           <Text style={[styles.label, darkMode && styles.textWhite]}>Evidence Photo <Text style={styles.req}>*</Text></Text>
-           {image.length > 0 && (
+           <Text style={[styles.label, darkMode && styles.textWhite]}>Evidence Photos <Text style={styles.req}>*</Text></Text>
+           {images.length > 0 && (
              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-              {image.map((uri, index) => (
+              {images.map((uri, index) => (
                 <View key={index} style={styles.previewContainer}>
                 <Image source={{ uri }} style={styles.previewImage} resizeMode="cover" />
 
-               <TouchableOpacity onPress={() => setImage(image.filter((_, i) => i !== index))} style={styles.removeImgBtn}>
+               <TouchableOpacity onPress={() => setImages(images.filter((_, i) => i !== index))} style={styles.removeImgBtn}>
                  <Trash2 size={16} color="white" />
                  <Text style={styles.removeImgText}>Remove</Text>
                </TouchableOpacity>
@@ -240,14 +301,14 @@ const updateLocationWithAddress = async (latitude, longitude) => {
            )}
 
              <View style={styles.uploadRow}>
-              <TouchableOpacity onPress={handleImagePick} style={[styles.uploadBtn,image.length > 0 ? styles.uploadBtnSmall : null,errors.image && styles.errorBorder]}>
-                 <Camera size={image.length > 0 ? 18 : 24} color="#1E88E5" />
-                 <Text style={image.length > 0 ? styles.uploadTextSmall : styles.uploadText}>Camera</Text>
+              <TouchableOpacity onPress={handleImagePick} style={[styles.uploadBtn,images.length > 0 ? styles.uploadBtnSmall : null,errors.image && styles.errorBorder]}>
+                 <Camera size={images.length > 0 ? 18 : 24} color="#1E88E5" />
+                 <Text style={images.length > 0 ? styles.uploadTextSmall : styles.uploadText}>Camera</Text>
                </TouchableOpacity>
 
-               <TouchableOpacity onPress={handleLibraryPick} style={[styles.uploadBtn,image.length > 0 ? styles.uploadBtnSmall : null,errors.image && styles.errorBorder]}>
-                 <ImageIcon size={image.length > 0 ? 18 : 24} color="#1E88E5" />
-                 <Text style={image.length > 0 ? styles.uploadTextSmall : styles.uploadText}>Gallery</Text>
+               <TouchableOpacity onPress={handleLibraryPick} style={[styles.uploadBtn,images.length > 0 ? styles.uploadBtnSmall : null,errors.image && styles.errorBorder]}>
+                 <ImageIcon size={images.length > 0 ? 18 : 24} color="#1E88E5" />
+                 <Text style={images.length > 0 ? styles.uploadTextSmall : styles.uploadText}>Gallery</Text>
                </TouchableOpacity>
              </View>
            {errors.image && <Text style={styles.errorText}>{errors.image}</Text>}
@@ -275,7 +336,7 @@ const updateLocationWithAddress = async (latitude, longitude) => {
              style={[styles.dropdownHeader, darkMode && styles.inputDark, errors.category && styles.errorBorder]}
            >
              <Text style={[styles.dropdownText, !selectedCategory && styles.placeholderText, darkMode && styles.textWhite]}>
-               {selectedCategory || "Select a Category"}
+               {selectedCategory ? selectedCategory.name : "Select a Category"}
              </Text>
              {isDropdownOpen ? <ChevronUp size={20} color="#6B7280" /> : <ChevronDown size={20} color="#6B7280" />}
            </TouchableOpacity>
@@ -284,11 +345,11 @@ const updateLocationWithAddress = async (latitude, longitude) => {
              <View style={[styles.dropdownList, darkMode && styles.cardDark]}>
                {categories.map((cat, index) => (
                  <TouchableOpacity 
-                   key={index} 
+                   key={cat.id} 
                    style={[styles.dropdownItem, darkMode && styles.dropdownItemDark]}
                    onPress={() => { setSelectedCategory(cat); setIsDropdownOpen(false); }}
                  >
-                   <Text style={[styles.dropdownItemText, darkMode && styles.textWhite]}>{cat}</Text>
+                   <Text style={[styles.dropdownItemText, darkMode && styles.textWhite]}>{cat.name}</Text>
                  </TouchableOpacity>
                ))}
              </View>
@@ -403,15 +464,15 @@ const styles = StyleSheet.create({
   uploadRow: { flexDirection: 'row', gap: 12, marginBottom: 8 },
   uploadBtn: { flex: 1, height: 80, borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed', borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB' },
   uploadText: { color: '#1E88E5', marginTop: 4, fontSize: 12, fontWeight: '600' },
-  previewContainer: { width:270, height:180, borderRadius:12, overflow:'hidden', marginRight:12, position:'relative' },
+  previewContainer: { width:270, height:180, borderRadius:12, overflow:'hidden', marginRight:12, position:'relative' }, // Updated
   previewImage: { width: '100%', height: '100%' },
-  uploadBtnSmall: { flex: 1, height: 40, borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed', borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB' }, 
-  uploadTextSmall: { color: '#1E88E5', marginTop: 4, fontSize: 10, fontWeight: '600' }, 
+  uploadBtnSmall: { flex: 1, height: 40, borderWidth: 1, borderColor: '#E5E7EB', borderStyle: 'dashed', borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F9FAFB' }, // New
+  uploadTextSmall: { color: '#1E88E5', marginTop: 4, fontSize: 10, fontWeight: '600' }, // New
 
   removeImgBtn: { position:'absolute', bottom:10, right:10, backgroundColor:'rgba(0,0,0,0.6)', flexDirection:'row', padding:6, borderRadius:8, alignItems:'center' },
   removeImgText: { color:'white', fontSize:12, marginLeft:4 },
-  addImgBtn: { position:'absolute', bottom:10, right:90, backgroundColor:'rgba(0,0,0,0.6)', flexDirection:'row', padding:6, borderRadius:8, alignItems:'center' },
-  addImgText: { color:'white', fontSize:12, marginLeft:4, alignItems: 'center'  },
+  addImgBtn: { position:'absolute', bottom:10, right:90, backgroundColor:'rgba(0,0,0,0.6)', flexDirection:'row', padding:6, borderRadius:8, alignItems:'center' }, // New
+  addImgText: { color:'white', fontSize:12, marginLeft:4, alignItems: 'center'  }, // New
 
   aiBox: { flexDirection: 'row', alignItems: 'center', marginBottom: 16, backgroundColor: '#F3E8FF', padding: 10, borderRadius: 8 },
   aiText: { fontSize: 12, color: '#9333EA', marginLeft: 8, fontWeight: '500' },

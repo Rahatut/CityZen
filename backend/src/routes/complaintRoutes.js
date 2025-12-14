@@ -6,7 +6,7 @@ const multer = require('multer'); // Import multer
 const upload = multer({ storage: multer.memoryStorage() }); // Configure multer for memory storage
 
 // POST /api/complaints - with image upload
-router.post('/complaints', upload.single('image'), complaintController.createComplaint);
+router.post('/complaints', upload.array('images'), complaintController.createComplaint);
 router.get('/complaints/categories', complaintController.getCategories);
 
 module.exports = router;
