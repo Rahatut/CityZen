@@ -6,23 +6,29 @@ npm install //first time or if new package added
 cd frontend
 npm install //first time or if new package added
 
-3.
-cd D:\your_directory\CityZen\ai-service
-venv\Scripts\activate
+cd ai-service
+python -m venv venv //if not there
+ls venv\Scripts //check
+.\venv\Scripts\Activate.ps1
+pip install fastapi uvicorn
+pip install ultralytics //might need other pkg, u will be informed
+uvicorn ai_service:app --host 0.0.0.0 --port 8000 ///1st time
+
+//terminal 4
+cd ai-service
+venv\Scripts\Activate.ps1
 uvicorn ai_service:app --host 0.0.0.0 --port 8000
 
-change in runAidetection
-
-4.
+3.
 terminal 1
 cd backend
 npm run dev
 
-5.
+4.
 terminal 2
 lt --port 3000 --subdomain cityzen-api
 
-6.
+5.
 terminal 3
 cd frontend
 npx expo start

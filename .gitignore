@@ -3,8 +3,10 @@ frontend/package-lock.json
 frontend/.expo/
 frontend/node_modules
 #.expo/
-#package-lock.json
+package-lock.json
 backend/.env
 backend/node_modules
 backend/package-lock.json
 node_modules
+ai-service/__pycache__
+ai-service/venv
