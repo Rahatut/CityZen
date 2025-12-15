@@ -18,6 +18,7 @@ const env = require('./config/env');
 
 const authRoutes = require('./routes/authRoutes');
 const complaintRoutes = require('./routes/complaintRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 const errorHandler = require('./middleware/errorHandler');
 const AuthorityCompany = require('./models/AuthorityCompany');
 
@@ -103,6 +104,7 @@ async function startServer() {
     // This correctly maps the frontend call (POST /api/users) to the route defined in authRoutes.js
 	app.use('/api', authRoutes); 
 	app.use('/api', complaintRoutes);
+	app.use('/api/ai', aiRoutes);
 
 	// Static folder
 	app.use('/public', express.static(path.join(__dirname, 'public')));

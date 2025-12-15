@@ -13,10 +13,29 @@ import { auth } from '../config/firebase';
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 
-export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
+export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, toggleDarkMode, route }) {
+
+  const [aiResult, setAiResult] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const CONFIDENCE_THRESHOLD = 50;
+
+  const aiDetected = aiResult?.label?.toLowerCase().includes("pothole");
+
+  const aiConfidence = aiResult?.confidence ?? 0;
+
+  const aiApproved = aiDetected && aiConfidence >= CONFIDENCE_THRESHOLD;
+
   // Form State
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [title, setTitle] = useState(
+    aiResult ? "Pothole Detected" : ""
+  );
+  const [description, setDescription] = useState(
+    aiResult
+      ? `AI detected a pothole with ${aiResult.confidence}% confidence.`
+      : ""
+  );
+
   const [selectedCategory, setSelectedCategory] = useState(null); // Changed to store object {id, name}
   const [categories, setCategories] = useState([]); // New state for fetched categories
   const [images, setImages] = useState([]); // Changed to array for multiple images
@@ -34,6 +53,18 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
+    if (!aiResult) return;
+
+    console.log("AI RESULT RECEIVED:", aiResult);
+
+    setTitle("Pothole detected");
+    setDescription(
+      `AI detected a pothole with ${aiResult.confidence}% confidence.`
+    );
+
+  }, [aiResult]);
+
+  useEffect(() => {
     const fetchCategories = async () => {
       try {
         const response = await axios.get(`${API_URL}/api/complaints/categories`, {
@@ -49,6 +80,18 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
     };
     fetchCategories();
   }, []);
+
+  useEffect(() => {
+    if (aiResult && categories.length > 0) {
+      const roadCategory = categories.find(cat =>
+        cat.name.toLowerCase().includes("road")
+      );
+
+      if (roadCategory) {
+        setSelectedCategory(roadCategory);
+      }
+    }
+  }, [categories, aiResult]);
 
   //Permissions
   const requestLocationPermission = async () => {
@@ -137,6 +180,31 @@ const updateLocationWithAddress = async (latitude, longitude) => {
   }
 };
 
+  const runAiDetection = async (imageUri) => {
+    setAiLoading(true);
+    setAiResult(null);
+
+    const formData = new FormData();
+    formData.append("image", {
+      uri: imageUri,
+      name: "photo.jpg",
+      type: "image/jpeg",
+    });
+
+    try {
+      const res = await fetch("http://192.168.1.5:8000/detect", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      setAiResult(data);
+    } catch (err) {
+      Alert.alert("AI Error", "Failed to analyze image");
+    } finally {
+      setAiLoading(false);
+    }
+  };
   
   //Camera
   const handleImagePick = async () => {
@@ -155,6 +223,7 @@ const updateLocationWithAddress = async (latitude, longitude) => {
     if (result.assets?.length > 0) {
       const asset = result.assets[0];
       setImages(prev => [...prev, asset.uri]); // Append new image to array
+      await runAiDetection(asset.uri);
 
       const exifLocation = extractLocationFromExif(asset.exif);
       if (exifLocation) {
@@ -183,6 +252,7 @@ const updateLocationWithAddress = async (latitude, longitude) => {
     if (result.assets?.length > 0) {
       const asset = result.assets[0];
       setImages(prev => [...prev, ...result.assets.map(a => a.uri)]); // Append new images to array
+      await runAiDetection(asset.uri);
 
       const exifLocation = extractLocationFromExif(asset.exif);
       if (exifLocation) {
@@ -211,6 +281,15 @@ const updateLocationWithAddress = async (latitude, longitude) => {
       };
 
       const handleSubmit = async () => {
+
+      if (aiResult && !aiApproved) {
+        Alert.alert(
+          "Please add clearer images or retake the photo."
+        );
+        return;
+      }
+
+      
       const newErrors = {};
       if (images.length === 0) newErrors.image = 'Evidence photos are mandatory.'; // Update validation
       if (!title) newErrors.title = 'Title is required.';
@@ -282,6 +361,23 @@ const updateLocationWithAddress = async (latitude, longitude) => {
         <Text style={[styles.heading, darkMode && styles.textWhite]}>Submit Complaint</Text>
         
         <View style={[styles.card, darkMode && styles.cardDark]}>
+
+          {aiResult && (
+            <View style={{
+              backgroundColor: "#EFF6FF",
+              padding: 10,
+              borderRadius: 8,
+              marginBottom: 12,
+              flexDirection: "row",
+              alignItems: "center"
+            }}>
+              <Sparkles size={16} color="#1E88E5" />
+              <Text style={{ marginLeft: 8, color: "#1E88E5", fontSize: 12 }}>
+                AI auto-filled this report. Please review before submitting.
+              </Text>
+            </View>
+          )}
+
            
            {/* 1. Image Upload (Mandatory) */}
            <Text style={[styles.label, darkMode && styles.textWhite]}>Evidence Photos <Text style={styles.req}>*</Text></Text>
@@ -313,11 +409,37 @@ const updateLocationWithAddress = async (latitude, longitude) => {
              </View>
            {errors.image && <Text style={styles.errorText}>{errors.image}</Text>}
 
+           {aiLoading && (
+            <Text style={{ color: "#6B7280", marginBottom: 8 }}>
+              Analyzing image with AI...
+            </Text>
+          )}
+
            {/* AI Placeholder */}
-           <View style={styles.aiBox}>
-             <Sparkles size={16} color="#9333EA" />
-             <Text style={styles.aiText}>AI detected: "Pothole" (Confidence: 85%)</Text>
-           </View>
+           {aiResult && (
+            <View
+              style={[
+                styles.aiBox,
+                {
+                  backgroundColor: aiApproved ? "#ECFDF5" : "#FEF2F2",
+                },
+              ]}
+            >
+              <Sparkles
+                size={16}
+                color={aiApproved ? "#059669" : "#DC2626"}
+              />
+              <Text
+                style={[
+                  styles.aiText,
+                  { color: aiApproved ? "#059669" : "#DC2626" },
+                ]}
+              >
+                AI detected: "{aiResult.label}" — Confidence: {aiConfidence}%
+              </Text>
+            </View>
+          )}
+
 
            {/* 2. Title */}
            <Text style={[styles.label, darkMode && styles.textWhite]}>Title <Text style={styles.req}>*</Text></Text>
@@ -435,10 +557,14 @@ const updateLocationWithAddress = async (latitude, longitude) => {
            </TouchableOpacity>
 
            <TouchableOpacity 
-             onPress={handleSubmit} 
-             style={[styles.submitBtn, isSubmitting && styles.btnDisabled]}
-             disabled={isSubmitting}
-           >
+            onPress={handleSubmit}
+            disabled={isSubmitting || (aiResult && !aiApproved)}
+            style={[
+              styles.submitBtn,
+              (isSubmitting || (aiResult && !aiApproved)) && styles.btnDisabled
+            ]}
+          >
+
              {isSubmitting ? <ActivityIndicator color="white" /> : <Text style={styles.submitBtnText}>Submit Complaint</Text>}
            </TouchableOpacity>
 

@@ -14,6 +14,7 @@ import HomeScreenNative from './src/screens/HomeScreen';
 import SubmitComplaintScreenNative from './src/screens/SubmitComplaintScreen';
 import FeedScreenNative from './src/screens/FeedScreen';
 import ProfileScreenNative from './src/screens/ProfileScreen';
+import ReportPotholeScreen from "./src/screens/ReportPotholeScreen";
 
 // Web (JSX) components
 import LoginComponent from './src/components/Login.jsx';
@@ -77,6 +78,10 @@ function RootNavigator({ isAuthenticated, onLogin, onLogout }) {
       {isAuthenticated ? <AppTabNavigator onLogout={onLogout} /> : <AuthNavigator onLogin={onLogin} />}
     </NavigationContainer>
   );
+}
+
+export default function App() {
+  return <ReportPotholeScreen />;
 }
 
 export default function App() {
