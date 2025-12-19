@@ -6,7 +6,7 @@ frontend/node_modules
 package-lock.json
 backend/.env
 backend/node_modules
-backend/package-lock.json
+backend/package-lock.jsondi
 node_modules
 ai-service/__pycache__
 ai-service/venv

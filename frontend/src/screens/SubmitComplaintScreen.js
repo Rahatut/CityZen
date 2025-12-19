@@ -192,7 +192,7 @@ const updateLocationWithAddress = async (latitude, longitude) => {
     });
 
     try {
-      const res = await fetch("http://192.168.1.5:8000/detect", {
+      const res = await fetch("http://192.168.0.103:8000/detect", {
         method: "POST",
         body: formData,
       });
