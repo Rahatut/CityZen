@@ -8,5 +8,6 @@ const upload = multer({ storage: multer.memoryStorage() }); // Configure multer 
 // POST /api/complaints - with image upload
 router.post('/complaints', upload.array('images'), complaintController.createComplaint);
 router.get('/complaints/categories', complaintController.getCategories);
+router.get('/complaints/recommend-authorities', complaintController.getRecommendedAuthorities);
 
 module.exports = router;

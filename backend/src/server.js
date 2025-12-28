@@ -1,6 +1,6 @@
-// Load env from project root (.env)
 const path = require('path');
 require('dotenv').config({ path: path.join(process.cwd(), '.env') });
+// Load env from project root (.env)
 
 console.log('Loaded DATABASE_URL:', process.env.DATABASE_URL || '(not found)');
 
@@ -10,17 +10,19 @@ const cors = require('cors');
 
 // CRITICAL CHANGE 1: Import sequelize from the models/index file
 // This ensures all User, Citizen, Authority, and Admin models are loaded with associations.
-const { sequelize, Category } = require('./models'); 
+const { sequelize, Category, AuthorityCompany, AuthorityCompanyCategory } = require('./models'); 
 const logger = require('./utils/logger');
 const env = require('./config/env');
+const supabase = require('./config/supabase');
 // REMOVED: const sequelize = require('./config/database'); // Redundant after CRITICAL CHANGE 1
 // REMOVED: const initFirebase = require('./config/firebase'); // Not needed for this client-auth flow
 
 const authRoutes = require('./routes/authRoutes');
-const complaintRoutes = require('./routes/complaintRoutes');
+const complaintRoutes =require('./routes/complaintRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const errorHandler = require('./middleware/errorHandler');
-const AuthorityCompany = require('./models/AuthorityCompany');
+
+
 
 async function startServer() {
 	// -------------------------------
@@ -77,8 +79,44 @@ async function startServer() {
 		}
 		logger.info("Companies seeded");
 
+		const authorityCategoriesToSeed = [
+			// DNCC – North Dhaka municipal services
+			{ authorityCompanyId: 1, categoryId: 1 }, // Roads & Transport
+			{ authorityCompanyId: 1, categoryId: 2 }, // Garbage & Waste
+			{ authorityCompanyId: 1, categoryId: 3 }, // Streetlights
+			{ authorityCompanyId: 1, categoryId: 4 }, // Drains
+			{ authorityCompanyId: 1, categoryId: 5 }, // Infrastructure
+			{ authorityCompanyId: 1, categoryId: 6 }, // Public spaces
+			// DSCC – South Dhaka municipal services
+			{ authorityCompanyId: 2, categoryId: 1 },
+			{ authorityCompanyId: 2, categoryId: 2 },
+			{ authorityCompanyId: 2, categoryId: 3 },
+			{ authorityCompanyId: 2, categoryId: 4 },
+			{ authorityCompanyId: 2, categoryId: 5 },
+			{ authorityCompanyId: 2, categoryId: 6 }, 
+			// DESCO – North Dhaka electricity
+			{ authorityCompanyId: 3, categoryId: 3 },		  
+			// DPDC – South Dhaka electricity
+			{ authorityCompanyId: 4, categoryId: 3 },		  
+			// DoE – Environmental enforcement
+			{ authorityCompanyId: 5, categoryId: 6 },		  
+			// DWASA – Water, sewerage, drainage
+			{ authorityCompanyId: 6, categoryId: 4 }
+		];		  
+
+		for (const authorityCategoryData of authorityCategoriesToSeed) {
+			await AuthorityCompanyCategory.findOrCreate({
+			  where: {
+				authorityCompanyId: authorityCategoryData.authorityCompanyId,
+				categoryId: authorityCategoryData.categoryId
+			  },
+			  defaults: authorityCategoryData
+			});
+		}		  
+		logger.info("Authority Company Categories relations seeded");
+
 	} catch (err) {
-		logger.error("Database connection failed:", err.message);
+		logger.error("Database connection failed: ", err.message);
 	}
 
 	// -------------------------------

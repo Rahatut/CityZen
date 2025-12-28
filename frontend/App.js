@@ -23,7 +23,7 @@ export default function App() {
   return (
     <NavigationContainer>
       <StatusBar barStyle={darkMode ? "light-content" : "dark-content"} backgroundColor={darkMode ? "#1F2937" : "#FFFFFF"} />
-      <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: darkMode ? '#111827' : '#F9FAFB' } }}>
+      <Stack.Navigator initialRouteName="HomeScreen" screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: darkMode ? '#111827' : '#F9FAFB' } }}>
         <Stack.Screen name="Login">{(props) => <LoginScreen {...props} onLogin={() => props.navigation.replace('HomeScreen')} />}</Stack.Screen>
         <Stack.Screen name="Signup">{(props) => <SignupScreen {...props} onSignup={() => props.navigation.replace('HomeScreen')} />}</Stack.Screen>
         <Stack.Screen name="HomeScreen">{(props) => <HomeScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.replace('Login')} />}</Stack.Screen>

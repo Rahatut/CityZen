@@ -1,147 +1,61 @@
-# Cityzen – Local Development Setup
+add your IP address to these files:
+frontend\src\services\api.js -> API_BASE_URL
+frontend\src\screens\SubmitComplaintScreen.js -> runAiDetection
+frontend\.env -> EXPO_PUBLIC_GEMINI_API_URL
 
-This file contains **everything needed** to run Cityzen locally, including the **final run script** and the **full manual setup**.
+to get IP address:
+write ipconfig in terminal
+copy the  IPv4 Address under Wireless LAN adapter Wi-Fi
 
----
+there are .env files in these folders:
+frontend
+backend
+gemini-service
 
-## Final Run Script (Quick Start)
+//
 
-### Terminal 1
+run each in a separate terminal:
 
-```powershell
-.\run-cityzen.ps1
-```
-
-If the script is not available or fails, follow the manual setup below.
-
-## Manual Setup
-
-You will need 4 terminals running simultaneously.
-
-### Terminal 1 – Backend
-
-Navigate to the backend folder:
-
-```powershell
+1.
 cd backend
-```
-
-Install dependencies (first time or when a new package is added):
-
-```powershell
-npm install
-```
-
-Start the backend development server:
-
-```powershell
+npm install // first time or if new package added
 npm run dev
-```
 
-### Terminal 2 – Expose Backend API
-
-Use LocalTunnel to expose the backend API on port 3000:
-
-```powershell
+2.
 lt --port 3000 --subdomain cityzen-api
-```
+// get link, copy paste into frontend\.env -> EXPO_PUBLIC_API_URL
+// go to link and add tunnel password
 
-Keep this terminal running while the app is in use.
-
-### Terminal 3 – Frontend (Expo)
-
-Navigate to the frontend folder:
-
-```powershell
-cd frontend
-```
-
-Install dependencies (first time or when a new package is added):
-
-```powershell
-npm install
-```
-
-Start the Expo frontend:
-
-```powershell
-npx expo start
-```
-
-If you encounter a lucide-react error:
-
-```powershell
-npm install lucide-react
-```
-
-After Expo starts:
-
-1. Open Expo Go on your phone
-2. Scan the QR code generated in the terminal
-3. First launch may take 1–3 minutes (this is normal)
-4. The Cityzen app will appear after booting
-
-### Terminal 4 – AI Service (FastAPI)
-
-Navigate to the AI service folder:
-
-```powershell
+3.
 cd ai-service
-```
-
-Create a Python virtual environment (if not already created):
-
-```powershell
-python -m venv venv
-```
-
-Verify the virtual environment:
-
-```powershell
-ls venv\Scripts
-```
-
-Activate the virtual environment:
-
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-
-Install required Python packages:
-
-```powershell
+// if first time
+python -m pip install python-multipart
 pip install fastapi uvicorn
-pip install ultralytics
-# other packages may be required later
-```
+pip install ultralytics 
+python -m venv venv
+// 
+venv\Scripts\activate
+uvicorn ai_service:app --host 0.0.0.0 --port 8000 
 
-Run the AI service (first time):
+4.
+cd openrouter-service
+// if first time
+pip install -r requirements.txt
+python -m venv venv
+//
+venv\Scripts\activate
+uvicorn openrouter_service:app --host 0.0.0.0 --port 8001
 
-```powershell
-uvicorn ai_service:app --host 0.0.0.0 --port 8000
-```
+5.
+cd frontend
+npm install // first time or if new package added
+npm start OR npx expo start
 
-For subsequent runs:
+// if there is a problem with lucid react
+npm install lucide-react
 
-```powershell
-cd ai-service
-venv\Scripts\Activate.ps1
-uvicorn ai_service:app --host 0.0.0.0 --port 8000
-```
-
-## Notes
-
-- Always activate the Python virtual environment before running the AI service
-- Run `npm install` again if dependencies change
-- Expo first boot delay is normal
-- All four terminals must remain running while using the app
-
-## Terminal Overview
-
-| Terminal   | Purpose         |
-| ---------- | --------------- |
-| Terminal 1 | Backend server  |
-| Terminal 2 | LocalTunnel API |
-| Terminal 3 | Frontend (Expo) |
-| Terminal 4 | AI Service      |
-
+after expo start
+go to expo go mobile app
+scan the generated QR code
+first time 1-3 mins normal
+then boot up and see the app

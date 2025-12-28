@@ -30,4 +30,23 @@ router.post('/detect-pothole', upload.single('image'), async (req, res) => {
   }
 });
 
+router.post('/generate-text', async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    if (!prompt) {
+      return res.status(400).json({ message: 'Prompt is required' });
+    }
+
+    const geminiRes = await axios.post(
+      'http://127.0.0.1:8001/generate',
+      { prompt }
+    );
+
+    res.json(geminiRes.data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Gemini text generation failed' });
+  }
+});
+
 module.exports = router;

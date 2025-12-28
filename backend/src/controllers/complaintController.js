@@ -1,5 +1,6 @@
-const { Complaint, Category, ComplaintImages, sequelize } = require('../models');
+const { Complaint, Category, ComplaintImages, AuthorityCompany, sequelize } = require('../models');
 const supabase = require('../config/supabase'); // Import Supabase client
+const axios = require('axios');
 
 exports.createComplaint = async (req, res) => {
   const t = await sequelize.transaction();
@@ -83,12 +84,52 @@ exports.createComplaint = async (req, res) => {
 
 exports.getCategories = async (req, res) => {
   try {
+    console.time('getCategories-db');
     const categories = await Category.findAll({
       attributes: ['id', 'name', 'description']
     });
+    console.timeEnd('getCategories-db');
     res.json(categories);
   } catch (error) {
     console.error('Get Categories Error:', error.message);
     res.status(500).json({ message: 'Server error while fetching categories.' });
+  }
+};
+
+exports.getRecommendedAuthorities = async (req, res) => {
+  try {
+    const { category, description, latitude, longitude, location_string } = req.query;
+
+    if (!category || !description || !latitude || !longitude) {
+      return res.status(400).json({ message: 'Missing required query parameters.' });
+    }
+
+    const authorities = await AuthorityCompany.findAll({
+      attributes: ['id', 'name']
+    });
+
+    const openRouterResponse = await axios.post('http://localhost:8001/recommend-authority', {
+      category,
+      description,
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
+      authorities: authorities.map(a => ({ id: a.id, name: a.name })),
+      location_string
+    });
+
+    const recommendation = openRouterResponse.data;
+
+    const authority = await AuthorityCompany.findByPk(recommendation.authorityCompanyId, {
+      attributes: ['name']
+    });
+
+    res.status(200).json({
+      ...recommendation,
+      authorityName: authority ? authority.name : 'Unknown Authority'
+    });
+
+  } catch (error) {
+    console.error('Error getting recommended authorities:', error);
+    res.status(500).json({ message: 'Error getting recommended authorities', error: error.message });
   }
 };

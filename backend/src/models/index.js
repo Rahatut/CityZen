@@ -7,6 +7,8 @@ const Complaint = require('./Complaint');
 const Category = require('./Category');
 const AuthorityCompany = require('./AuthorityCompany');
 const ComplaintImages = require('./ComplaintImages');
+const ComplaintAssignment = require('./ComplaintAssignment');
+const AuthorityCompanyCategory = require('./AuthorityCompanyCategory');
 
 // --- Define Associations (One-to-One) ---
 
@@ -59,6 +61,30 @@ ComplaintImages.belongsTo(Complaint, {
   foreignKey: 'complaintId'
 });
 
+// Many-to-many relationship between AuthorityCompany and Category
+AuthorityCompany.belongsToMany(Category, { 
+  through: AuthorityCompanyCategory,
+  foreignKey: 'authorityCompanyId',
+  otherKey: 'categoryId'
+});
+Category.belongsToMany(AuthorityCompany, {
+  through: AuthorityCompanyCategory,
+  foreignKey: 'categoryId',
+  otherKey: 'authorityCompanyId'
+});
+
+// Many-to-many relationship between Complaint and AuthorityCompany
+Complaint.belongsToMany(AuthorityCompany, {
+  through: ComplaintAssignment,
+  foreignKey: 'complaintId',
+  otherKey: 'authorityCompanyId'
+});
+AuthorityCompany.belongsToMany(Complaint, {
+  through: ComplaintAssignment,
+  foreignKey: 'authorityCompanyId',
+  otherKey: 'complaintId'
+});
+
 
 module.exports = {
   sequelize,
@@ -69,5 +95,7 @@ module.exports = {
   Complaint,
   ComplaintImages,
   AuthorityCompany,
-  Category
+  Category,
+  AuthorityCompanyCategory,
+  ComplaintAssignment
 };
