@@ -1,36 +1,85 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import Navigation from '../components/Navigation';
-import { Users, Shield } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, BackHandler, Alert, TouchableOpacity, Text } from 'react-native';
+import { BarChart3, AlertTriangle, Settings, ShieldCheck } from 'lucide-react-native';
 
-export default function AdminDashboardScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
+// Import the top navigation used by citizens
+import Navigation from '../components/Navigation'; 
+
+// Import modular sub-screens
+import AdminStatusScreen from './AdminStatusScreen';
+import AdminFlagsScreen from './AdminFlagsScreen';
+import AdminSystemScreen from './AdminSystemScreen';
+import AdminProfileScreen from './AdminProfileScreen';
+
+export default function AdminDashboardScreen({ onLogout, darkMode, toggleDarkMode }) {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [initialFlagTab, setInitialFlagTab] = useState('reported');
+
+  // Logic to jump from Status Screen to a specific Flag Tab
+  const jumpToFlags = (subTab) => {
+    setInitialFlagTab(subTab);
+    setActiveTab('flags');
+  };
+
+  useEffect(() => {
+    const backAction = () => {
+      if (activeTab !== 'overview') {
+        setActiveTab('overview');
+        return true;
+      }
+      Alert.alert("Logout", "Exit Admin Panel?", [
+        { text: "Cancel" },
+        { text: "Logout", onPress: onLogout }
+      ]);
+      return true;
+    };
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
+    return () => backHandler.remove();
+  }, [activeTab]);
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'overview': return <AdminStatusScreen darkMode={darkMode} onJump={jumpToFlags} />;
+      case 'flags':    return <AdminFlagsScreen darkMode={darkMode} defaultTab={initialFlagTab} />;
+      case 'system':   return <AdminSystemScreen darkMode={darkMode} />;
+      case 'profile':  return <AdminProfileScreen darkMode={darkMode} onLogout={onLogout} />;
+      default:         return <AdminStatusScreen darkMode={darkMode} />;
+    }
+  };
+
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
-      <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <Text style={[styles.heading, darkMode && styles.textWhite]}>Admin Dashboard</Text>
-        <View style={styles.grid}>
-          <View style={[styles.card, darkMode && styles.cardDark]}>
-             <Users size={24} color="#1E88E5" />
-             <Text style={[styles.stat, darkMode && styles.textWhite]}>1,247 Users</Text>
-          </View>
-          <View style={[styles.card, darkMode && styles.cardDark]}>
-             <Shield size={24} color="#16A34A" />
-             <Text style={[styles.stat, darkMode && styles.textWhite]}>856 Complaints</Text>
-          </View>
-        </View>
-      </ScrollView>
+      {/* Top Header (Same as Citizen Space) */}
+      <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      
+      <View style={styles.mainContent}>
+        {renderContent()}
+      </View>
+
+      {/* Admin Bottom Tabs */}
+      <View style={[styles.bottomNav, darkMode && styles.bottomNavDark]}>
+        <TabItem icon={BarChart3} label="Status" active={activeTab === 'overview'} onPress={() => setActiveTab('overview')} />
+        <TabItem icon={AlertTriangle} label="Flags" active={activeTab === 'flags'} onPress={() => setActiveTab('flags')} />
+        <TabItem icon={Settings} label="System" active={activeTab === 'system'} onPress={() => setActiveTab('system')} />
+        <TabItem icon={ShieldCheck} label="Admin" active={activeTab === 'profile'} onPress={() => setActiveTab('profile')} />
+      </View>
     </View>
   );
 }
 
+const TabItem = ({ icon: Icon, label, active, onPress }) => (
+  <TouchableOpacity style={styles.navItem} onPress={onPress}>
+    <Icon size={22} color={active ? '#1E88E5' : '#9CA3AF'} />
+    <Text style={[styles.navLabel, active && {color: '#1E88E5', fontWeight: 'bold'}]}>{label}</Text>
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   darkContainer: { backgroundColor: '#111827' },
-  heading: { fontSize: 24, fontWeight: 'bold', color: '#1F2937', marginBottom: 16 },
-  textWhite: { color: 'white' },
-  grid: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  card: { flex: 1, backgroundColor: 'white', padding: 16, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  cardDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
-  stat: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginTop: 8 },
+  mainContent: { flex: 1, paddingBottom: 80 },
+  bottomNav: { position: 'absolute', bottom: 0, width: '100%', height: 80, backgroundColor: 'white', flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#EEE', paddingBottom: 20 },
+  bottomNavDark: { backgroundColor: '#1F2937', borderTopColor: '#374151' },
+  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  navLabel: { fontSize: 10, color: '#9CA3AF', marginTop: 4 }
 });
