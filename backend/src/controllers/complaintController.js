@@ -338,8 +338,8 @@ exports.getRecommendedAuthorities = async (req, res) => {
     } = req.query;
 
     // Validate that we have at least the basic info
-    if (!category || !description || !latitude || !longitude) {
-      return res.status(400).json({ message: 'Missing required query parameters: category, description, latitude, longitude' });
+    if (!category || !latitude || !longitude) {
+      return res.status(400).json({ message: 'Missing required query parameters: category, latitude, longitude' });
     }
 
     // Load authority list from DB to send to the AI recommendation service
@@ -354,7 +354,6 @@ exports.getRecommendedAuthorities = async (req, res) => {
     // Call the OpenRouter / recommendation service
     const openRouterResponse = await axios.post(`${openRouterUrl}/recommend-authority`, {
       category,
-      description,
       latitude: parseFloat(latitude),
       longitude: parseFloat(longitude),
       location_string,

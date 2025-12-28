@@ -11,6 +11,7 @@ export default function SubmittedComplaintScreen({ navigation }) {
         title,
         description,
         selectedCategory,
+        assignedAuthorities, // Destructure assignedAuthorities
         resetState,
     } = useComplaint();
 
@@ -27,7 +28,7 @@ export default function SubmittedComplaintScreen({ navigation }) {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerText}>Your complaint has been submitted</Text>
+                <Text style={styles.headerText}>Your complaint has been submitted!</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.detailsContainer}>
@@ -48,6 +49,15 @@ export default function SubmittedComplaintScreen({ navigation }) {
                         <Text style={styles.label}>Category</Text>
                         <Text style={styles.value}>{selectedCategory?.name || 'N/A'}</Text>
                     </View>
+
+                    {assignedAuthorities.length > 0 && (
+                        <View style={styles.detailItem}>
+                            <Text style={styles.label}>Routed To Authorities</Text>
+                            {assignedAuthorities.map((authorityName, index) => (
+                                <Text key={index} style={styles.value}>{authorityName}</Text>
+                            ))}
+                        </View>
+                    )}
 
                     <View style={styles.detailItem}>
                         <Text style={styles.label}>Location</Text>
@@ -100,12 +110,10 @@ const styles = StyleSheet.create({
         backgroundColor: '#1E88E5',
         alignItems: 'center',
         justifyContent: 'center',
-        borderBottomRightRadius: 40,
-        borderBottomLeftRadius: 40,
         paddingHorizontal: 20,
     },
     headerText: {
-        fontSize: 30,
+        fontSize: 26,
         fontWeight: 'bold',
         textAlign: 'center',
         color: 'white',

@@ -12,6 +12,8 @@ export const ComplaintProvider = ({ children }) => {
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [privacyEnabled, setPrivacyEnabled] = useState(false);
+  const [aiResult, setAiResult] = useState(null);
+  const [assignedAuthorities, setAssignedAuthorities] = useState([]); // New state for assigned authorities
 
   const resetState = () => {
     setImages([]);
@@ -21,6 +23,8 @@ export const ComplaintProvider = ({ children }) => {
     setDescription('');
     setSelectedCategory(null);
     setPrivacyEnabled(false);
+    setAiResult(null);
+    setAssignedAuthorities([]); // Reset assigned authorities
   };
   
   const value = {
@@ -30,6 +34,8 @@ export const ComplaintProvider = ({ children }) => {
     setLocation,
     locationTime,
     setLocationTime,
+    aiResult,
+    setAiResult,
     title,
     setTitle,
     description,
@@ -38,6 +44,8 @@ export const ComplaintProvider = ({ children }) => {
     setSelectedCategory,
     privacyEnabled,
     setPrivacyEnabled,
+    assignedAuthorities,
+    setAssignedAuthorities,
     resetState,
   };
 

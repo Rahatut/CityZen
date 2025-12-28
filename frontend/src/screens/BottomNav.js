@@ -23,7 +23,7 @@ export default function BottomNav({ navigation, darkMode }) {
         <Text style={[styles.label, { color: getColor('HomeScreen'), fontWeight: getWeight('HomeScreen') }]}>Home</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.navigate('SubmitComplaint')} style={styles.tab}>
+      <TouchableOpacity onPress={() => navigation.navigate('CameraScreen')} style={styles.tab}>
         <FileText size={24} color={getColor('SubmitComplaint')} />
         <Text style={[styles.label, { color: getColor('SubmitComplaint'), fontWeight: getWeight('SubmitComplaint') }]}>Submit</Text>
       </TouchableOpacity>

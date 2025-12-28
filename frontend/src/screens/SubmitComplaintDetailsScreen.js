@@ -12,20 +12,12 @@ import axios from 'axios';
 import { auth } from '../config/firebase';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const OPENROUTER_API_URL = process.env.EXPO_PUBLIC_OPENROUTER_API_URL;
 
 
 export default function SubmitComplaintDetailsScreen({ navigation, onLogout, darkMode, toggleDarkMode, route }) {
 
-    const [aiResult, setAiResult] = useState(null);
     const [aiLoading, setAiLoading] = useState(false);
-
-    const CONFIDENCE_THRESHOLD = 50;
-
-    const aiDetected = aiResult?.label?.toLowerCase().includes("pothole");
-
-    const aiConfidence = aiResult?.confidence ?? 0;
-
-    const aiApproved = aiDetected && aiConfidence >= CONFIDENCE_THRESHOLD;
 
     const {
         images,
@@ -38,9 +30,17 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         setSelectedCategory,
         privacyEnabled,
         setPrivacyEnabled,
-        setTitle, // Need to set title if AI detects it
-        setDescription, // Need to set description if AI detects it
+        aiResult,
+        setAiResult,
+        setTitle,
+        setDescription,
     } = useComplaint();
+
+    const CONFIDENCE_THRESHOLD = 50;
+    const aiDetected = aiResult?.label?.toLowerCase().includes("pothole");
+    const aiConfidence = aiResult?.confidence ?? 0;
+    const aiApproved = aiDetected && aiConfidence >= CONFIDENCE_THRESHOLD;
+
 
     const [categories, setCategories] = useState([]);
 
@@ -63,59 +63,70 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     useEffect(() => {
         if (!aiResult) return;
 
-        console.log("AI RESULT RECEIVED:", aiResult);
+        const generateComplaintText = async () => {
+          if (aiResult && aiResult.confidence > 60 && location.latitude && location.longitude) {
+            try {
+              const response = await axios.post(`${OPENROUTER_API_URL}/generate_complaint_text`, {
+                category: aiResult.label,
+                confidence: aiResult.confidence,
+                latitude: location.latitude,
+                longitude: location.longitude,
+                location_string: location.fullAddress,
+              });
+    
+              if (response.data.title) {
+                setTitle(response.data.title);
+              }
+              if (response.data.description) {
+                setDescription(response.data.description);
+              }
+            } catch (error) {
+              console.error("Error generating complaint text with OpenRouter:", error);
+              Alert.alert("Generation Failed", "Could not generate complaint details. Please check your connection or try again.");
+            }
+          }
+        };
+    
+        generateComplaintText();
+      }, [aiResult, location]);
 
-        setTitle("Pothole detected"); // Set title to context
-        setDescription(
-            `AI detected a pothole with ${aiResult.confidence}% confidence.`
-        ); // Set description to context
-
-    }, [aiResult]);
-
-    // Existing category logic
-    // useEffect(() => {
-    //     const fetchCategories = async () => {
-    //         try {
-    //             const response = await axios.get(`${API_URL}/api/complaints/categories`, {
-    //                 headers: {
-    //                     'bypass-tunnel-reminder': 'true'
-    //                 }
-    //             });
-    //             setCategories(response.data);
-    //             // If no category is selected, select 'Pothole' if available, otherwise the first one
-    //             if (!selectedCategory && response.data.length > 0) {
-    //                 const potholeCategory = response.data.find(cat => cat.name.toLowerCase() === 'pothole');
-    //                 if (potholeCategory) {
-    //                     setSelectedCategory(potholeCategory);
-    //                 } else {
-    //                     setSelectedCategory(response.data[0]);
-    //                 }
-    //             }
-    //         } catch (error) {
-    //             console.error('Error fetching categories:', error);
-    //             Alert.alert('Error', 'Failed to load categories.');
-    //         }
-    //     };
-    //     fetchCategories();
-    // }, [selectedCategory]); // Depend on selectedCategory from context
-
-    // AI category logic
-    // useEffect(() => {
-    //     if (aiResult && categories.length > 0) {
-    //         const roadCategory = categories.find(cat =>
-    //             cat.name.toLowerCase().includes("road")
-    //         );
-
-    //         if (roadCategory) {
-    //             setSelectedCategory(roadCategory);
-    //         }
-    //     }
-    // }, [categories, aiResult]);
-
-    // (Temporary) Set "Pothole" category always  
     useEffect(() => {
-        setSelectedCategory({ id: 'temp-pothole', name: 'Pothole' });
+        const fetchCategories = async () => {
+          try {
+            const response = await axios.get(`${API_URL}/api/complaints/categories`, {
+              timeout: 30000, // 30-second timeout
+              headers: {
+                'bypass-tunnel-reminder': 'true'
+              }
+            });
+            setCategories(response.data);
+          } catch (error) {
+            console.error('Error fetching categories:', error);
+            Alert.alert('Error', 'Failed to load categories.');
+          }
+        };
+        fetchCategories();
+      }, []);
+    
+      useEffect(() => {
+        if (aiResult && categories.length > 0) {
+          const roadCategory = categories.find(cat =>
+            cat.name.toLowerCase().includes("road")
+          );
+    
+          if (roadCategory) {
+            setSelectedCategory(roadCategory);
+          }
+        }
+      }, [categories, aiResult]);
+
+    useEffect(() => {
+        //If location is not already set, fetch it.
+        if (!location) {
+            handleGPSDetect();
+        }
     }, []);
+
 
     //Permissions
     const requestLocationPermission = async () => {
@@ -216,7 +227,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         });
 
         try {
-            const res = await fetch("http://192.168.0.107:8000/detect", {
+            const res = await fetch("http://192.168.0.103:8000/detect", {
                 method: "POST",
                 body: formData,
             });
@@ -410,6 +421,12 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
                         </View>
                     )}
 
+<                   TouchableOpacity onPress={() => setPrivacyEnabled(!privacyEnabled)} style={styles.privacyRow}>
+                        <View style={[styles.checkbox, privacyEnabled && styles.checkboxActive]}>{privacyEnabled && <CheckCircle size={14} color="white" />}</View>
+                        <Text style={[styles.privacyText, darkMode && styles.textGray]}>Blur faces or license plates (Privacy)</Text>
+                        <Shield size={16} color="#6B7280" style={{ marginLeft: 'auto' }} />
+                    </TouchableOpacity>
+
                     <Text style={[styles.label, darkMode && styles.textWhite]}>Category <Text style={styles.req}>*</Text></Text>
                     <TouchableOpacity
                         onPress={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -436,7 +453,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
                     )}
 
                     <View style={styles.locationSection}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, marginBottom: 8 }}>
                             <Text style={[styles.label, darkMode && styles.textWhite, { marginBottom: 0 }]}>
                                 Location Details <Text style={styles.req}>*</Text>
                             </Text>
@@ -479,12 +496,6 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
                             </View>
                         </>
                     </View>
-
-                    <TouchableOpacity onPress={() => setPrivacyEnabled(!privacyEnabled)} style={styles.privacyRow}>
-                        <View style={[styles.checkbox, privacyEnabled && styles.checkboxActive]}>{privacyEnabled && <CheckCircle size={14} color="white" />}</View>
-                        <Text style={[styles.privacyText, darkMode && styles.textGray]}>Blur faces or license plates (Privacy)</Text>
-                        <Shield size={16} color="#6B7280" style={{ marginLeft: 'auto' }} />
-                    </TouchableOpacity>
 
                     <View style={styles.buttonContainer}>
                         <TouchableOpacity onPress={handleBack} style={styles.backButton}>

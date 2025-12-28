@@ -2,15 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
 import { Camera, Image as GalleryIcon, ArrowRight } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as Location from 'expo-location';
 import { useComplaint } from '../context/ComplaintContext'; // Import the context hook
 
 export default function CameraScreen({ navigation }) {
     const {
         images,
         setImages,
-        setLocation,
-        setLocationTime,
     } = useComplaint();
 
     const [imageUri, setImageUri] = useState(null); // Local for displaying preview
@@ -24,15 +21,6 @@ export default function CameraScreen({ navigation }) {
     };
 
     //Permissions
-    const requestLocationPermission = async () => {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission to access location is required!');
-            return false;
-        }
-        return true;
-    };
-
     const requestCameraPermission = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
@@ -51,74 +39,10 @@ export default function CameraScreen({ navigation }) {
         return true;
     };
 
-    //Location
-    // Convert DMS array to decimal degrees
-    const convertDMSToDecimal = (dms, ref) => {
-        if (!dms) return null;
-        const [deg, min, sec] = dms;
-        let dec = deg + min / 60 + sec / 3600;
-
-        if (ref === 'S' || ref === 'W') dec = -dec;
-        return dec;
-    };
-
-    const extractLocationFromExif = (exif) => {
-        if (!exif) return null;
-
-        const latitude = exif.GPSLatitude
-            ? Array.isArray(exif.GPSLatitude)
-                ? convertDMSToDecimal(exif.GPSLatitude, exif.GPSLatitudeRef)
-                : exif.GPSLatitudeRef === 'S' ? -exif.GPSLatitude : exif.GPSLatitude
-            : null;
-
-        const longitude = exif.GPSLongitude
-            ? Array.isArray(exif.GPSLongitude)
-                ? convertDMSToDecimal(exif.GPSLongitude, exif.GPSLongitudeRef)
-                : exif.GPSLongitudeRef === 'W' ? -exif.GPSLongitude : exif.GPSLongitude
-            : null;
-
-        if (latitude !== null && longitude !== null) return { latitude, longitude };
-        return null;
-    };
-
-    const updateLocationWithAddress = async (latitude, longitude) => {
-        setLocating(true);
-
-        try {
-            const [addr] = await Location.reverseGeocodeAsync({ latitude, longitude });
-
-            const areaName = addr.name || addr.street || addr.subregion || addr.city || 'Unknown area';
-            const district = addr.district || addr.city || '';
-            const region = addr.region || '';
-
-            setLocation({
-                latitude,
-                longitude,
-                areaName,
-                district,
-                region,
-                fullAddress: `${areaName}, ${district}, ${region}`,
-            });
-
-            setLocationTime(new Date().toLocaleString());
-        } catch (err) {
-            console.warn('Reverse geocode failed', err);
-            setLocation({
-                latitude,
-                longitude,
-                fullAddress: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
-            });
-            setLocationTime(new Date().toLocaleString());
-        } finally {
-            setLocating(false);
-        }
-    };
-
     //Camera
     const handleImagePick = async () => {
         const hasPermission = await requestCameraPermission();
-        const locPerm = await requestLocationPermission();
-        if (!locPerm || !hasPermission) return;
+        if (!hasPermission) return;
 
         const result = await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -131,23 +55,12 @@ export default function CameraScreen({ navigation }) {
             const asset = result.assets[0];
             setImages([asset.uri]); // Set images to context
             setImageUri(asset.uri);
-            await runAiDetection(asset.uri);
-
-            const exifLocation = extractLocationFromExif(asset.exif);
-            if (exifLocation) {
-                await updateLocationWithAddress(exifLocation.latitude, exifLocation.longitude);
-                return;
-            }
-
-            const gps = await Location.getCurrentPositionAsync({});
-            await updateLocationWithAddress(gps.coords.latitude, gps.coords.longitude);
         }
     };
 
     const handleLibraryPick = async () => {
         const hasPermission = await requestLibraryPermission();
-        const locPerm = await requestLocationPermission();
-        if (!locPerm || !hasPermission) return;
+        if (!hasPermission) return;
 
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.All,
@@ -161,23 +74,13 @@ export default function CameraScreen({ navigation }) {
             const asset = result.assets[0];
             setImages(result.assets.map(a => a.uri)); // Set images to context
             setImageUri(asset.uri);
-            await runAiDetection(asset.uri);
-
-            const exifLocation = extractLocationFromExif(asset.exif);
-            if (exifLocation) {
-                await updateLocationWithAddress(exifLocation.latitude, exifLocation.longitude);
-                return;
-            }
-
-            const gps = await Location.getCurrentPositionAsync({});
-            await updateLocationWithAddress(gps.coords.latitude, gps.coords.longitude);
         }
     };
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerText}>Take a snap of your community issue</Text>
+                <Text style={styles.headerText}>Take a snap of your community issue!</Text>
             </View>
 
             <View style={styles.cameraContainer}>
@@ -212,13 +115,14 @@ const styles = StyleSheet.create({
         backgroundColor: 'white',
     },
     header: {
-        height: 240,
+        height: 200,
         backgroundColor: '#1E88E5',
         alignItems: 'center',
         justifyContent: 'center',
+        paddingHorizontal: 20,
     },
     headerText: {
-        fontSize: 30,
+        fontSize: 26,
         fontWeight: 'bold',
         textAlign: 'center',
         color: 'white',

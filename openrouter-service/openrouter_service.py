@@ -54,7 +54,6 @@ class Authority(BaseModel):
 
 class RecommendationRequest(BaseModel):
     category: str
-    description: str
     latitude: float
     longitude: float
     authorities: list[Authority]
@@ -150,7 +149,6 @@ async def recommend_authority(request: RecommendationRequest):
         f"{authorities_list_str}\n\n"
         f"Complaint Details:\n"
         f"Category: {request.category}\n"
-        f"Description: {request.description}\n"
         f"Location: {location_info}\n\n"
         f"Rules:\n"
         f"- Do NOT invent or add authorities\n"
