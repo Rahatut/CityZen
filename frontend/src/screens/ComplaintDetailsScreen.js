@@ -1,25 +1,58 @@
-import React, { useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle } from 'lucide-react-native';
+import axios from 'axios';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function ComplaintDetailsScreen({ route, navigation, onLogout, darkMode, toggleDarkMode }) {
-  const { id } = route.params || { id: 1 };
-  const [upvotes, setUpvotes] = useState(24);
-  const steps = ['Submitted', 'Accepted', 'In Progress', 'Resolved'];
-  const currentStep = 2; 
+  const { id } = route.params || {};
+  const [upvotes, setUpvotes] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [complaint, setComplaint] = useState(null);
+  const [retryTick, setRetryTick] = useState(0);
 
-  const complaint = {
-    title: 'Pothole on Main Street',
-    category: 'Roads & Infrastructure',
-    area: 'Ward 3',
-    status: 'In Progress',
-    image: 'https://images.unsplash.com/photo-1709934730506-fba12664d4e4?w=1080',
-    description: 'Large pothole causing traffic slowdowns near the school crossing.',
-    date: '2 days ago',
-    coords: '40.7128° N, 74.0060° W'
+  // Map backend status to timeline steps
+  const steps = ['Submitted', 'Accepted', 'In Progress', 'Resolved'];
+  const statusToStepIndex = {
+    pending: 0,
+    in_progress: 2,
+    resolved: 3,
+    closed: 3,
+    rejected: 0,
   };
+  const currentStep = statusToStepIndex[(complaint?.currentStatus || 'pending')] ?? 0;
+
+  useEffect(() => {
+    const fetchComplaint = async () => {
+      if (!id) {
+        setError('No complaint ID provided');
+        setLoading(false);
+        return;
+      }
+      try {
+        setError(null);
+        const response = await axios.get(`${API_URL}/api/complaints/${id}`, {
+          headers: { 'bypass-tunnel-reminder': 'true' },
+          timeout: 10000,
+        });
+        setComplaint(response.data);
+      } catch (err) {
+        console.error('Error fetching complaint:', err);
+        let message = 'Failed to load complaint details';
+        if (err.code === 'ECONNABORTED') message = 'Network timeout. Please check your connection.';
+        else if (err.message === 'Network Error') message = 'Network error. Please check your connection.';
+        else if (err.response?.status === 404) message = 'Complaint not found.';
+        setError(message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchComplaint();
+  }, [id, retryTick]);
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
@@ -30,15 +63,31 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
           <Text style={[styles.backText, darkMode && styles.textWhite]}>Back</Text>
         </TouchableOpacity>
 
-        <Image source={{ uri: complaint.image }} style={styles.image} resizeMode="cover" />
+        {loading ? (
+          <View style={styles.loaderWrap}>
+            <ActivityIndicator size="large" color="#3B82F6" />
+            <Text style={[styles.loadingText, darkMode && styles.textWhite]}>Loading complaint...</Text>
+          </View>
+        ) : error ? (
+          <View style={[styles.errorCard, darkMode && styles.errorCardDark]}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); setError(null); setRetryTick((t) => t + 1); }}>
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Image source={{ uri: (complaint?.images?.[0]?.imageURL) || 'https://via.placeholder.com/1200x800?text=No+Image' }} style={styles.image} resizeMode="cover" />
+        )}
 
         <View style={styles.content}>
           <View style={[styles.card, darkMode && styles.cardDark]}>
-            <Text style={[styles.title, darkMode && styles.textWhite]}>{complaint.title}</Text>
-            <View style={[styles.badge, { backgroundColor: '#FFEDD5', alignSelf: 'flex-start', marginBottom: 16 }]}>
-               <Text style={{ color: '#C2410C', fontWeight: 'bold' }}>{complaint.status}</Text>
+            <Text style={[styles.title, darkMode && styles.textWhite]}>{complaint?.title || 'Untitled Complaint'}</Text>
+            <View style={[styles.badge, { backgroundColor: (complaint?.currentStatus === 'pending' ? '#FEE2E2' : '#FFEDD5'), alignSelf: 'flex-start', marginBottom: 16 }]}>
+               <Text style={{ color: (complaint?.currentStatus === 'pending' ? '#B91C1C' : '#C2410C'), fontWeight: 'bold' }}>
+                 {(complaint?.currentStatus || 'pending').replace('_',' ').replace(/^./, s => s.toUpperCase())}
+               </Text>
             </View>
-            <Text style={[styles.description, darkMode && styles.textGray]}>{complaint.description}</Text>
+            <Text style={[styles.description, darkMode && styles.textGray]}>{complaint?.description || 'No description provided.'}</Text>
             <TouchableOpacity onPress={() => setUpvotes(p => p + 1)} style={[styles.upvoteBtn, darkMode && styles.upvoteBtnDark]}>
               <Heart size={20} color={darkMode ? 'white' : 'black'} />
               <Text style={[styles.upvoteText, darkMode && styles.textWhite]}>Upvote ({upvotes})</Text>
@@ -83,4 +132,11 @@ const styles = StyleSheet.create({
   stepContainer: { alignItems: 'center', flex: 1 },
   stepText: { fontSize: 10, color: '#9CA3AF', marginTop: 4 },
   stepTextActive: { color: '#16A34A', fontWeight: 'bold' },
+  loaderWrap: { height: 250, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 8, color: '#6B7280' },
+  errorCard: { margin: 16, padding: 16, borderRadius: 12, backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FECACA' },
+  errorCardDark: { backgroundColor: '#7F1D1D', borderColor: '#991B1B' },
+  errorText: { color: '#DC2626' },
+  retryBtn: { marginTop: 8, backgroundColor: '#EF4444', paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+  retryText: { color: 'white', fontWeight: 'bold' },
 });

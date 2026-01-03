@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
-import { 
-  View, Text, TextInput, TouchableOpacity, ScrollView, 
-  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert 
+import {
+  View, Text, TextInput, TouchableOpacity, ScrollView,
+  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert
 } from 'react-native';
 import { Mail, Lock, Building2, Eye, EyeOff, AlertCircle } from 'lucide-react-native';
 
 // NEW IMPORTS for Firebase and API calls
 import axios from 'axios';
-import { auth } from '../config/firebase'; 
+import { auth } from '../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function LoginScreen({ navigation }) {
   // NOTE: Role state is kept for UI only; actual login role is fetched from DB
-  const [role, setRole] = useState('citizen'); 
+  const [role, setRole] = useState('citizen');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -27,7 +27,7 @@ export default function LoginScreen({ navigation }) {
       setError('Please enter both email and password.');
       return;
     }
-    
+
     setError(null);
     setIsLoading(true);
 
@@ -56,7 +56,7 @@ export default function LoginScreen({ navigation }) {
         navigation.replace('AuthorityDashboard');
       } else {
         // ✅ FIX: Navigates to <Stack.Screen name="HomeScreen" />
-        navigation.replace('HomeScreen'); 
+        navigation.replace('HomeScreen');
       }
 
     } catch (error) {
@@ -70,7 +70,7 @@ export default function LoginScreen({ navigation }) {
       } else if (error.response && error.response.status === 404) {
         message = 'User profile not found in database. Please contact support.';
       }
-      
+
       setError(message);
     } finally {
       setIsLoading(false);
@@ -96,12 +96,12 @@ export default function LoginScreen({ navigation }) {
               <Text style={styles.errorText}>{error}</Text>
             </View>
           )}
-          
+
           {/* Role Selector (Kept for UI look, but not used for navigation) */}
           <View style={styles.roleContainer}>
             {['citizen', 'authority', 'admin'].map((r) => (
-              <TouchableOpacity 
-                key={r} 
+              <TouchableOpacity
+                key={r}
                 onPress={() => setRole(r)}
                 style={[styles.roleBtn, role === r && styles.roleBtnActive]}
               >
@@ -114,7 +114,7 @@ export default function LoginScreen({ navigation }) {
 
           {role === 'citizen' && (
             <Text style={styles.noteText}>
-              <Text style={{fontWeight: 'bold'}}>Note:</Text> Citizen identity remains hidden from other users.
+              <Text style={{ fontWeight: 'bold' }}>Note:</Text> Citizen identity remains hidden from other users.
             </Text>
           )}
 
@@ -122,11 +122,11 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.label}>Email</Text>
           <View style={styles.inputWrapper}>
             <Mail size={20} color="#9CA3AF" />
-            <TextInput 
-              style={styles.input} 
-              placeholder="Enter email" 
+            <TextInput
+              style={styles.input}
+              placeholder="Enter email"
               placeholderTextColor="#9CA3AF"
-              value={email} 
+              value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
               keyboardType="email-address"
@@ -136,12 +136,12 @@ export default function LoginScreen({ navigation }) {
           <Text style={styles.label}>Password</Text>
           <View style={styles.inputWrapper}>
             <Lock size={20} color="#9CA3AF" />
-            <TextInput 
-              style={styles.input} 
-              placeholder="Enter password" 
+            <TextInput
+              style={styles.input}
+              placeholder="Enter password"
               placeholderTextColor="#9CA3AF"
-              secureTextEntry={!showPassword} 
-              value={password} 
+              secureTextEntry={!showPassword}
+              value={password}
               onChangeText={setPassword}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -154,7 +154,7 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* Login Button */}
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={handleLogin}
             style={[styles.loginBtn, isLoading && styles.btnDisabled]}
             disabled={isLoading}
@@ -174,7 +174,7 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           <TouchableOpacity onPress={() => navigation.navigate('Signup')} style={styles.secondaryBtn}>
-             <Text style={styles.secondaryBtnText}>Create an Account</Text>
+            <Text style={styles.secondaryBtnText}>Create an Account</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

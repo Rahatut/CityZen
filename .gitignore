@@ -10,3 +10,7 @@ backend/package-lock.json
 node_modules
 ai-service/__pycache__
 ai-service/venv
+Documentation/
+openrouter-service/.env
+openrouter-service/venv
+openrouter-service/__pycache__

@@ -16,7 +16,7 @@ export default function HomeScreen({ navigation, onLogout, darkMode, toggleDarkM
           <Text style={{ color: darkMode ? '#9CA3AF' : '#6B7280' }}>Let's make our city better together</Text>
         </View>
 
-        <TouchableOpacity onPress={() => navigation.navigate('SubmitComplaint')} style={styles.bigBtn}>
+        <TouchableOpacity onPress={() => navigation.navigate('Camera')} style={styles.bigBtn}>
           <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: 10, borderRadius: 12 }}>
             <PlusCircle size={32} color="white" />
           </View>
@@ -39,10 +39,10 @@ export default function HomeScreen({ navigation, onLogout, darkMode, toggleDarkM
 
         <Text style={[styles.sectionTitle, darkMode && styles.textWhite]}>Overview</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-           <StatCard icon={FileText} color="#1E88E5" bg="#EFF6FF" value={stats.total} label="Total" darkMode={darkMode} />
-           <StatCard icon={CheckCircle} color="#16A34A" bg="#F0FDF4" value={stats.resolved} label="Resolved" darkMode={darkMode} />
-           <StatCard icon={Clock} color="#EA580C" bg="#FFF7ED" value={stats.pending} label="Pending" darkMode={darkMode} />
-           <StatCard icon={TrendingUp} color="#9333EA" bg="#FAF5FF" value={stats.inProgress} label="In Progress" darkMode={darkMode} />
+          <StatCard icon={FileText} color="#1E88E5" bg="#EFF6FF" value={stats.total} label="Total" darkMode={darkMode} />
+          <StatCard icon={CheckCircle} color="#16A34A" bg="#F0FDF4" value={stats.resolved} label="Resolved" darkMode={darkMode} />
+          <StatCard icon={Clock} color="#EA580C" bg="#FFF7ED" value={stats.pending} label="Pending" darkMode={darkMode} />
+          <StatCard icon={TrendingUp} color="#9333EA" bg="#FAF5FF" value={stats.inProgress} label="In Progress" darkMode={darkMode} />
         </View>
       </ScrollView>
       <BottomNav navigation={navigation} darkMode={darkMode} />

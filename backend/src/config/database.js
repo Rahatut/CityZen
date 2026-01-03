@@ -14,7 +14,7 @@ const sequelize = new Sequelize(
   process.env.DATABASE_URL, 
   {
     dialect: 'postgres',
-    protocol: 'postgrAes',
+    protocol: 'postgres',
     logging: false, // Set to true to see SQL queries if needed
     // Required for secure connections to services like Supabase
     dialectOptions: {
