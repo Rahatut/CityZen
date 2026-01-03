@@ -261,7 +261,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         });
 
         try {
-            const res = await fetch("http://192.168.0.190:8000/detect", {
+            const res = await fetch("http://192.168.0.199:8000/detect", {
                 method: "POST",
                 body: formData,
             });
