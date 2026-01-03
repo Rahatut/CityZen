@@ -43,8 +43,4 @@ async def detect(image: UploadFile = File(...)):
     if not detections:
         detections.append({"label": "No Detection", "confidence": 0.0})
 
-<<<<<<< HEAD
     return {"detections": detections}
-=======
-    return {"detections": detections}
->>>>>>> main
