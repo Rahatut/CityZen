@@ -5,25 +5,42 @@ import io
 
 app = FastAPI()
 
-model = YOLO("pothole_model.pt")
+# Load your models
+pothole_model = YOLO("pothole_model.pt")
+manhole_model = YOLO("manhole_model.pt")
 
 @app.post("/detect")
-async def detect_pothole(image: UploadFile = File(...)):
+async def detect(image: UploadFile = File(...)):
     img_bytes = await image.read()
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
 
-    results = model(img)
+    detections = []
 
+    # Run pothole model
+    results = pothole_model(img)
     boxes = results[0].boxes
-
     if boxes is not None and len(boxes) > 0:
-        confidence = float(boxes.conf[0]) * 100
-        label = "Pothole"
-    else:
-        confidence = 0.0
-        label = "No Pothole"
+        for box in boxes:
+            detections.append({
+                "label": "Pothole",
+                "confidence": round(float(box.conf) * 100, 2)
+            })
 
-    return {
-        "label": label,
-        "confidence": round(confidence, 2)
-    }
+    # Run manhole model
+    results = manhole_model(img)
+    boxes = results[0].boxes
+    if boxes is not None and len(boxes) > 0:
+        for box in boxes:
+            # box.cls gives the class index, use it to get class name
+            class_name = manhole_model.names[int(box.cls)]
+            if class_name == "closed_manhole":
+                continue  # skip it
+            detections.append({
+                "label": class_name,
+                "confidence": round(float(box.conf) * 100, 2)
+            })
+
+    if not detections:
+        detections.append({"label": "No Detection", "confidence": 0.0})
+
+    return {"detections": detections}
