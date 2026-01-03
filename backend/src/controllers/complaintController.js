@@ -151,8 +151,43 @@ exports.getAllComplaints = async (req, res) => {
       offset: parseInt(offset),
     });
 
+    // Ensure image URLs are accessible: generate signed URLs where possible
+    const bucketName = 'cityzen-media';
+    const complaintsWithSignedImages = await Promise.all(
+      rows.map(async (complaint) => {
+        if (complaint.images && complaint.images.length > 0) {
+          complaint.images = await Promise.all(
+            complaint.images.map(async (img) => {
+              try {
+                const url = img.imageURL;
+                const parsed = new URL(url);
+                const path = parsed.pathname || '';
+                // Extract object path after bucket name
+                const marker = `/${bucketName}/`;
+                const idx = path.indexOf(marker);
+                const objectPath = idx >= 0 ? path.slice(idx + marker.length) : null;
+
+                if (objectPath) {
+                  const { data, error } = await supabase.storage
+                    .from(bucketName)
+                    .createSignedUrl(objectPath, 60 * 60); // 1 hour
+                  if (!error && data?.signedUrl) {
+                    img.imageURL = data.signedUrl;
+                  }
+                }
+              } catch (e) {
+                // Leave original URL if signing fails
+              }
+              return img;
+            })
+          );
+        }
+        return complaint;
+      })
+    );
+
     res.json({
-      complaints: rows,
+      complaints: complaintsWithSignedImages,
       pagination: {
         total: count,
         page: parseInt(page),
@@ -233,6 +268,34 @@ exports.getComplaintById = async (req, res) => {
 
     if (!complaint) {
       return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    // Sign image URLs to ensure accessibility
+    const bucketName = 'cityzen-media';
+    if (complaint.images && complaint.images.length > 0) {
+      complaint.images = await Promise.all(
+        complaint.images.map(async (img) => {
+          try {
+            const url = img.imageURL;
+            const parsed = new URL(url);
+            const path = parsed.pathname || '';
+            const marker = `/${bucketName}/`;
+            const idx = path.indexOf(marker);
+            const objectPath = idx >= 0 ? path.slice(idx + marker.length) : null;
+            if (objectPath) {
+              const { data, error } = await supabase.storage
+                .from(bucketName)
+                .createSignedUrl(objectPath, 60 * 60);
+              if (!error && data?.signedUrl) {
+                img.imageURL = data.signedUrl;
+              }
+            }
+          } catch (e) {
+            // keep original URL on failure
+          }
+          return img;
+        })
+      );
     }
 
     res.json(complaint);

@@ -36,7 +36,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         setDescription,
     } = useComplaint();
 
-    const CONFIDENCE_THRESHOLD = 50;
+    const CONFIDENCE_THRESHOLD = 75;
     const aiDetected = aiResult?.label?.toLowerCase().includes("pothole");
     const aiConfidence = aiResult?.confidence ?? 0;
     const aiApproved = aiDetected && aiConfidence >= CONFIDENCE_THRESHOLD;
@@ -53,42 +53,64 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     const [errors, setErrors] = useState({});
 
     useEffect(() => {
-        // If coming from CameraScreen, images might be in context
-        // This useEffect will trigger AI detection if images are present when component mounts
-        if (images.length > 0) {
-            runAiDetection(images[0]);
-        }
-    }, [images]); // Depend on images from context
+        const runAllDetections = async () => {
+            if (images.length === 0) return;
+
+            let bestDetection = null;
+
+            for (const image of images) {
+                const result = await runAiDetection(image);
+
+                if (!result) continue;
+
+                // If multiple detections returned
+                const detectionsArray = result.detections ?? [result];
+
+                // Pick the one with highest confidence
+                for (const det of detectionsArray) {
+                    if (!bestDetection || det.confidence > bestDetection.confidence) {
+                        bestDetection = det;
+                    }
+                }
+            }
+
+            setAiResult(bestDetection); // store the best detection
+        };
+
+        runAllDetections();
+    }, [images]);
 
     useEffect(() => {
         if (!aiResult) return;
+        if (aiResult.confidence < CONFIDENCE_THRESHOLD) return;
+        if (!location || !location.latitude || !location.longitude) return;
+
+        const CONFIDENCE_THRESHOLD = 75;
+        const aiApproved = aiResult.confidence >= CONFIDENCE_THRESHOLD;
+
+        if (!aiApproved) return;
 
         const generateComplaintText = async () => {
-          if (aiResult && aiResult.confidence > 60 && location.latitude && location.longitude) {
             try {
-              const response = await axios.post(`${OPENROUTER_API_URL}/generate_complaint_text`, {
-                category: aiResult.label,
-                confidence: aiResult.confidence,
-                latitude: location.latitude,
-                longitude: location.longitude,
-                location_string: location.fullAddress,
-              });
-    
-              if (response.data.title) {
-                setTitle(response.data.title);
-              }
-              if (response.data.description) {
-                setDescription(response.data.description);
-              }
+                const response = await axios.post(`${OPENROUTER_API_URL}/generate_complaint_text`, {
+                    category: aiResult.label,
+                    confidence: aiResult.confidence,
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    location_string: location.fullAddress,
+                });
+
+                if (response.data.title) setTitle(response.data.title);
+                if (response.data.description) setDescription(response.data.description);
             } catch (error) {
-              console.error("Error generating complaint text with OpenRouter:", error);
-              Alert.alert("Generation Failed", "Could not generate complaint details. Please check your connection or try again.");
+                console.error("Error generating complaint text with OpenRouter:", error);
+                Alert.alert("Generation Failed", "Could not generate complaint details. Please check your connection or try again.");
             }
-          }
         };
-    
+
         generateComplaintText();
-      }, [aiResult, location]);
+
+    }, [aiResult, location]);
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -109,16 +131,29 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
       }, []);
     
       useEffect(() => {
-        if (aiResult && categories.length > 0) {
-          const roadCategory = categories.find(cat =>
-            cat.name.toLowerCase().includes("road")
-          );
-    
-          if (roadCategory) {
-            setSelectedCategory(roadCategory);
-          }
+        if (!aiResult) return;
+        if (aiResult.confidence < CONFIDENCE_THRESHOLD) return;
+        if (categories.length === 0) return;
+
+        let searchString = "";
+
+        // Decide what to search in categories based on AI label
+        if (aiResult.label.toLowerCase() === "pothole") {
+            searchString = "road";
+        } else if (aiResult.label.toLowerCase() === "open_manhole") {
+            searchString = "road";
         }
-      }, [categories, aiResult]);
+
+        if (searchString) {
+            const matchedCategory = categories.find(cat =>
+                cat.name.toLowerCase().includes(searchString)
+            );
+
+            if (matchedCategory) {
+                setSelectedCategory(matchedCategory);
+            }
+        }
+    }, [aiResult, categories]);
 
     useEffect(() => {
         //If location is not already set, fetch it.
@@ -217,7 +252,6 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
 
     const runAiDetection = async (imageUri) => {
         setAiLoading(true);
-        setAiResult(null);
 
         const formData = new FormData();
         formData.append("image", {
@@ -227,15 +261,16 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         });
 
         try {
-            const res = await fetch("http://192.168.0.103:8000/detect", {
+            const res = await fetch("http://10.224.170.233:8000/detect", {
                 method: "POST",
                 body: formData,
             });
 
             const data = await res.json();
-            setAiResult(data);
+            return data;
         } catch (err) {
             Alert.alert("AI Error", "Failed to analyze image");
+            return null;
         } finally {
             setAiLoading(false);
         }
@@ -247,7 +282,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         if (!locPerm || !hasPermission) return;
 
         const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            mediaTypes: ImagePicker.MediaType.All,
             allowsEditing: false,
             quality: 1,
             exif: true,
@@ -275,7 +310,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         if (!locPerm || !hasPermission) return;
 
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            mediaTypes: ImagePicker.MediaType.All,
             allowsEditing: false,
             quality: 1,
             allowsMultipleSelection: true, // Allow multiple selections
