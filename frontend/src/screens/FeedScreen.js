@@ -4,6 +4,7 @@ import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { Search, MapPin, Heart, AlertCircle } from 'lucide-react-native';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -13,12 +14,32 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [userUid, setUserUid] = useState(null);
+
+  // Load cached user to enable per-user upvote state
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem('userData');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.firebaseUid) setUserUid(parsed.firebaseUid);
+        }
+      } catch (err) {
+        console.warn('Failed to load user from storage', err);
+      }
+    })();
+  }, []);
 
   // Fetch complaints from API
   const fetchComplaints = useCallback(async () => {
     try {
       setError(null);
-      const response = await axios.get(`${API_URL}/api/complaints?page=1&limit=50`, {
+      const params = { page: 1, limit: 50 };
+      if (userUid) params.citizenUid = userUid;
+
+      const response = await axios.get(`${API_URL}/api/complaints`, {
+        params,
         headers: {
           'bypass-tunnel-reminder': 'true'
         },
@@ -46,7 +67,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [userUid]);
 
   // Initial load
   useEffect(() => {
@@ -153,8 +174,8 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
               <View style={styles.divider} />
               <View style={styles.rowBetween}>
                 <View style={styles.row}>
-                  <Heart size={14} color="#6B7280" />
-                  <Text style={styles.cardMeta}>{item.images?.length || 0} photos</Text>
+                  <Heart size={14} color={item.userHasUpvoted ? '#EF4444' : '#6B7280'} />
+                  <Text style={styles.cardMeta}>{item.upvoteCount ?? 0} upvotes</Text>
                 </View>
                 <Text style={styles.cardMeta}>
                   {new Date(item.createdAt).toLocaleDateString()}

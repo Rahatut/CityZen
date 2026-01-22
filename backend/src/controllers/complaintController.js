@@ -1,4 +1,4 @@
-const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, sequelize } = require('../models');
+const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, Upvote, sequelize } = require('../models');
 const supabase = require('../config/supabase'); // Import Supabase client
 const axios = require('axios');
 
@@ -128,7 +128,7 @@ exports.getCategories = async (req, res) => {
 ========================= */
 exports.getAllComplaints = async (req, res) => {
   try {
-    const { status, categoryId, page = 1, limit = 10 } = req.query;
+    const { status, categoryId, page = 1, limit = 10, citizenUid } = req.query;
 
     const where = {};
     if (status) where.currentStatus = status;
@@ -138,6 +138,15 @@ exports.getAllComplaints = async (req, res) => {
 
     const { count, rows } = await Complaint.findAndCountAll({
       where,
+      distinct: true,
+      attributes: {
+        include: [
+          [
+            sequelize.literal('(SELECT COUNT(*) FROM "Upvotes" WHERE "Upvotes"."complaintId" = "Complaint"."id")'),
+            'upvoteCount'
+          ],
+        ]
+      },
       include: [
         { model: Category, attributes: ['id', 'name'] },
         {
@@ -151,10 +160,23 @@ exports.getAllComplaints = async (req, res) => {
       offset: parseInt(offset),
     });
 
+    const complaintsPlain = rows.map((c) => c.toJSON());
+
+    if (citizenUid) {
+      const userUpvotes = await Upvote.findAll({
+        where: { citizenUid },
+        attributes: ['complaintId']
+      });
+      const votedSet = new Set(userUpvotes.map((u) => u.complaintId));
+      complaintsPlain.forEach((c) => {
+        c.userHasUpvoted = votedSet.has(c.id);
+      });
+    }
+
     // Ensure image URLs are accessible: generate signed URLs where possible
     const bucketName = 'cityzen-media';
     const complaintsWithSignedImages = await Promise.all(
-      rows.map(async (complaint) => {
+      complaintsPlain.map(async (complaint) => {
         if (complaint.images && complaint.images.length > 0) {
           complaint.images = await Promise.all(
             complaint.images.map(async (img) => {
@@ -218,6 +240,15 @@ exports.getComplaintsByCitizen = async (req, res) => {
 
     const { count, rows } = await Complaint.findAndCountAll({
       where,
+      distinct: true,
+      attributes: {
+        include: [
+          [
+            sequelize.literal('(SELECT COUNT(*) FROM "Upvotes" WHERE "Upvotes"."complaintId" = "Complaint"."id")'),
+            'upvoteCount'
+          ],
+        ]
+      },
       include: [
         { model: Category, attributes: ['id', 'name'] },
         {
@@ -254,8 +285,17 @@ exports.getComplaintsByCitizen = async (req, res) => {
 exports.getComplaintById = async (req, res) => {
   try {
     const { id } = req.params;
+    const { citizenUid } = req.query;
 
     const complaint = await Complaint.findByPk(id, {
+      attributes: {
+        include: [
+          [
+            sequelize.literal('(SELECT COUNT(*) FROM "Upvotes" WHERE "Upvotes"."complaintId" = "Complaint"."id")'),
+            'upvoteCount'
+          ],
+        ]
+      },
       include: [
         { model: Category, attributes: ['id', 'name', 'description'] },
         {
@@ -270,11 +310,18 @@ exports.getComplaintById = async (req, res) => {
       return res.status(404).json({ message: 'Complaint not found.' });
     }
 
+    const complaintData = complaint.toJSON();
+
+    if (citizenUid) {
+      const existing = await Upvote.findOne({ where: { citizenUid, complaintId: id } });
+      complaintData.userHasUpvoted = !!existing;
+    }
+
     // Sign image URLs to ensure accessibility
     const bucketName = 'cityzen-media';
-    if (complaint.images && complaint.images.length > 0) {
-      complaint.images = await Promise.all(
-        complaint.images.map(async (img) => {
+    if (complaintData.images && complaintData.images.length > 0) {
+      complaintData.images = await Promise.all(
+        complaintData.images.map(async (img) => {
           try {
             const url = img.imageURL;
             const parsed = new URL(url);
@@ -298,11 +345,54 @@ exports.getComplaintById = async (req, res) => {
       );
     }
 
-    res.json(complaint);
+    res.json(complaintData);
   } catch (error) {
     console.error('Get Complaint by ID Error:', error.message);
     res.status(500).json({
       message: 'Server error while fetching complaint.',
+    });
+  }
+};
+
+/* =========================
+   TOGGLE UPVOTE
+========================= */
+exports.toggleUpvote = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { citizenUid } = req.body;
+
+    if (!citizenUid) {
+      return res.status(400).json({ message: 'citizenUid is required to upvote.' });
+    }
+
+    const complaint = await Complaint.findByPk(id);
+    if (!complaint) {
+      return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    const existing = await Upvote.findOne({ where: { citizenUid, complaintId: id } });
+
+    let upvoted;
+    if (existing) {
+      await existing.destroy();
+      upvoted = false;
+    } else {
+      await Upvote.create({ citizenUid, complaintId: id });
+      upvoted = true;
+    }
+
+    const upvoteCount = await Upvote.count({ where: { complaintId: id } });
+
+    return res.json({
+      message: upvoted ? 'Upvoted' : 'Upvote removed',
+      upvoted,
+      upvoteCount,
+    });
+  } catch (error) {
+    console.error('Toggle Upvote Error:', error.message);
+    res.status(500).json({
+      message: 'Server error while toggling upvote.',
     });
   }
 };
