@@ -11,7 +11,7 @@ gnome-terminal \
     exec bash"
 
 # ⏳ Wait 15 seconds
-sleep 15
+sleep 25
 
 
 # === Terminal 2: AI Service ===
@@ -22,7 +22,6 @@ gnome-terminal \
     python -m uvicorn ai_service:app --host 0.0.0.0 --port 8000;
     exec bash"
 
-sleep 45
 # === Terminal 3: Frontend ===
 gnome-terminal \
   --tab --title="CityZen Frontend" -- bash -c "

@@ -9,6 +9,7 @@ const AuthorityCompany = require('./AuthorityCompany');
 const ComplaintImages = require('./ComplaintImages');
 const ComplaintAssignment = require('./ComplaintAssignment');
 const AuthorityCompanyCategory = require('./AuthorityCompanyCategory');
+const Upvote = require('./Upvote');
 
 // --- Define Associations (One-to-One) ---
 
@@ -85,6 +86,25 @@ AuthorityCompany.belongsToMany(Complaint, {
   otherKey: 'complaintId'
 });
 
+// Upvotes: Citizen (User) <-> Complaint
+Complaint.hasMany(Upvote, {
+  foreignKey: 'complaintId',
+  as: 'upvotes',
+  onDelete: 'CASCADE'
+});
+Upvote.belongsTo(Complaint, {
+  foreignKey: 'complaintId'
+});
+
+User.hasMany(Upvote, {
+  foreignKey: 'citizenUid',
+  sourceKey: 'firebaseUid'
+});
+Upvote.belongsTo(User, {
+  foreignKey: 'citizenUid',
+  targetKey: 'firebaseUid'
+});
+
 
 module.exports = {
   sequelize,
@@ -97,5 +117,6 @@ module.exports = {
   AuthorityCompany,
   Category,
   AuthorityCompanyCategory,
-  ComplaintAssignment
+  ComplaintAssignment,
+  Upvote
 };
