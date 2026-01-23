@@ -18,9 +18,6 @@ router.get('/complaints', complaintController.getAllComplaints);
 // Get complaints by citizen ID (placed before generic :id route to avoid conflicts)
 router.get('/complaints/citizen/:citizenUid', complaintController.getComplaintsByCitizen);
 
-// Toggle upvote for a complaint
-router.post('/complaints/:id/upvote', complaintController.toggleUpvote);
-
 // Get complaint by ID
 router.get('/complaints/:id', complaintController.getComplaintById);
 
