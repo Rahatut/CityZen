@@ -27,8 +27,14 @@ router.patch('/complaints/reports/:id', complaintController.updateReportStatus);
 // Get complaint by ID
 router.get('/complaints/:id', complaintController.getComplaintById);
 
-// Update complaint status
-router.patch('/complaints/:id/status', complaintController.updateComplaintStatus);
+// Update complaint status (with optional proof images)
+router.patch('/complaints/:id/status', upload.array('images'), complaintController.updateComplaintStatus);
+
+// Rate complaint
+router.post('/complaints/:id/rate', complaintController.rateComplaint);
+
+// Appeal complaint (with optional proof images)
+router.post('/complaints/:id/appeal', upload.array('images'), complaintController.appealComplaint);
 
 // Upvote complaint
 router.post('/complaints/:id/upvote', complaintController.upvoteComplaint);

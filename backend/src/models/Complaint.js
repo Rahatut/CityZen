@@ -43,6 +43,19 @@ const Complaint = sequelize.define('Complaint', {
   statusNotes: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  rating: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    validate: { min: 1, max: 5 }
+  },
+  appealReason: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  appealStatus: {
+    type: DataTypes.ENUM('none', 'pending', 'reviewed'),
+    defaultValue: 'none'
   }
 });
 

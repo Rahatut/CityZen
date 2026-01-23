@@ -356,9 +356,11 @@ exports.getComplaintById = async (req, res) => {
    UPDATE COMPLAINT STATUS
 ========================= */
 exports.updateComplaintStatus = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
     const { id } = req.params;
     const { currentStatus, statusNotes } = req.body;
+    const imageFiles = req.files;
 
     console.log(`[DEBUG] updateComplaintStatus called for ID: ${id}, Status: ${currentStatus}, Notes: ${statusNotes}`);
 
@@ -374,6 +376,7 @@ exports.updateComplaintStatus = async (req, res) => {
     ];
 
     if (!validStatuses.includes(currentStatus)) {
+      await t.rollback();
       return res.status(400).json({
         message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
       });
@@ -381,23 +384,162 @@ exports.updateComplaintStatus = async (req, res) => {
 
     const complaint = await Complaint.findByPk(id);
     if (!complaint) {
+      await t.rollback();
       return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    // Proof Validation
+    if ((currentStatus === 'in_progress' || currentStatus === 'resolved') && (!imageFiles || imageFiles.length === 0)) {
+      await t.rollback();
+      return res.status(400).json({ message: `Image proof is required for status: ${currentStatus.replace('_', ' ')}` });
     }
 
     await complaint.update({
       currentStatus,
       statusNotes: statusNotes || complaint.statusNotes,
-    });
+    }, { transaction: t });
 
+    // Upload images if provided
+    if (imageFiles && imageFiles.length > 0) {
+      const bucketName = 'cityzen-media';
+      const imageType = currentStatus === 'in_progress' ? 'progress' : (currentStatus === 'resolved' ? 'resolution' : 'initial');
+
+      for (const imageFile of imageFiles) {
+        const filePath = `complaint_images/${id}_${Date.now()}_${imageFile.originalname}`;
+        const { error: uploadError } = await supabase.storage
+          .from(bucketName)
+          .upload(filePath, imageFile.buffer, {
+            contentType: imageFile.mimetype,
+            upsert: false,
+          });
+
+        if (uploadError) throw new Error(`Supabase upload failed: ${uploadError.message}`);
+
+        const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
+        if (!publicUrlData?.publicUrl) throw new Error('Failed to retrieve public URL.');
+
+        await ComplaintImages.create({
+          complaintId: id,
+          imageURL: publicUrlData.publicUrl,
+          type: imageType
+        }, { transaction: t });
+      }
+    }
+
+    await t.commit();
     res.json({
       message: 'Complaint status updated successfully',
       complaint,
     });
   } catch (error) {
+    await t.rollback();
     console.error('Update Complaint Status Error:', error.message);
     res.status(500).json({
       message: 'Server error while updating complaint status.',
     });
+  }
+};
+
+/* =========================
+   RATE COMPLAINT
+========================= */
+exports.rateComplaint = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rating, citizenUid } = req.body;
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'Valid rating (1-5) is required.' });
+    }
+
+    const complaint = await Complaint.findByPk(id);
+    if (!complaint) return res.status(404).json({ message: 'Complaint not found.' });
+
+    // Basic permission check: only the reporter can rate
+    if (complaint.citizenUid !== citizenUid) {
+      return res.status(403).json({ message: 'Only the reporter can rate this complaint.' });
+    }
+
+    if (complaint.currentStatus !== 'resolved' && complaint.currentStatus !== 'completed') {
+      return res.status(400).json({ message: 'Complaint must be resolved before rating.' });
+    }
+
+    await complaint.update({ rating });
+    res.json({ message: 'Rating submitted successfully', rating });
+  } catch (error) {
+    console.error('Rate Complaint Error:', error.message);
+    res.status(500).json({ message: 'Server error while rating complaint.' });
+  }
+};
+
+/* =========================
+   APPEAL COMPLAINT
+========================= */
+exports.appealComplaint = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { appealReason, citizenUid } = req.body;
+    const imageFiles = req.files;
+
+    if (!appealReason) {
+      await t.rollback();
+      return res.status(400).json({ message: 'Appeal reason is required.' });
+    }
+
+    const complaint = await Complaint.findByPk(id);
+    if (!complaint) {
+      await t.rollback();
+      return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    // Permission check
+    if (complaint.citizenUid !== citizenUid) {
+      await t.rollback();
+      return res.status(403).json({ message: 'Only the reporter can appeal this complaint.' });
+    }
+
+    const eligibleStatuses = ['resolved', 'rejected'];
+    if (!eligibleStatuses.includes(complaint.currentStatus)) {
+      await t.rollback();
+      return res.status(400).json({ message: 'Complaint can only be appealed if resolved or rejected.' });
+    }
+
+    await complaint.update({
+      currentStatus: 'appealed',
+      appealReason,
+      appealStatus: 'pending'
+    }, { transaction: t });
+
+    // Upload appeal images
+    if (imageFiles && imageFiles.length > 0) {
+      const bucketName = 'cityzen-media';
+      for (const imageFile of imageFiles) {
+        const filePath = `appeal_images/${id}_${Date.now()}_${imageFile.originalname}`;
+        const { error: uploadError } = await supabase.storage
+          .from(bucketName)
+          .upload(filePath, imageFile.buffer, {
+            contentType: imageFile.mimetype,
+            upsert: false,
+          });
+
+        if (uploadError) throw new Error(`Supabase upload failed: ${uploadError.message}`);
+
+        const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(filePath);
+        await ComplaintImages.create({
+          complaintId: id,
+          imageURL: publicUrlData.publicUrl,
+          type: 'appeal'
+        }, { transaction: t });
+      }
+    }
+
+    await t.commit();
+    res.json({ message: 'Appeal submitted successfully', currentStatus: 'appealed' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Appeal Error:', error.message);
+    res.status(500).json({ message: 'Server error while submitting appeal.' });
   }
 };
 
@@ -565,88 +707,88 @@ exports.upvoteComplaint = async (req, res) => {
   }
 };
 
-  /* =========================
-     REPORT COMPLAINT
-  ========================= */
-  exports.reportComplaint = async (req, res) => {
-    const t = await sequelize.transaction();
-    try {
-      let { complaintId, reportedBy, reason, description } = req.body;
-      if (!complaintId && req.params && req.params.id) {
-        complaintId = req.params.id;
-      }
+/* =========================
+   REPORT COMPLAINT
+========================= */
+exports.reportComplaint = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    let { complaintId, reportedBy, reason, description } = req.body;
+    if (!complaintId && req.params && req.params.id) {
+      complaintId = req.params.id;
+    }
 
-      if (!complaintId || !reportedBy || !reason) {
-        return res.status(400).json({
-          message: 'Missing required fields: complaintId, reportedBy, reason'
-        });
-      }
-
-      // Validate reason enum
-      const validReasons = [
-        'harassment_threats',
-        'hate_speech_discrimination',
-        'nudity_sexual_content',
-        'spam_scams',
-        'fake_information_misinformation',
-        'self_harm_suicide',
-        'violence_graphic_content',
-        'intellectual_property',
-        'impersonation_fake_accounts',
-        'child_safety',
-        'other_violations'
-      ];
-
-      if (!validReasons.includes(reason)) {
-        return res.status(400).json({
-          message: `Invalid reason. Must be one of: ${validReasons.join(', ')}`
-        });
-      }
-
-      // Check if complaint exists
-      const complaint = await Complaint.findByPk(complaintId);
-      if (!complaint) {
-        return res.status(404).json({ message: 'Complaint not found' });
-      }
-
-      // Check if user already reported this complaint
-      const existingReport = await ComplaintReport.findOne({
-        where: {
-          complaintId,
-          reportedBy
-        }
-      });
-
-      if (existingReport) {
-        await t.rollback();
-        return res.status(400).json({ message: 'You have already reported this complaint' });
-      }
-
-      // Create the report
-      const report = await ComplaintReport.create(
-        {
-          complaintId,
-          reportedBy,
-          reason,
-          description,
-          status: 'pending'
-        },
-        { transaction: t }
-      );
-
-      await t.commit();
-      res.status(201).json({
-        message: 'Complaint reported successfully',
-        report
-      });
-    } catch (error) {
-      await t.rollback();
-      console.error('Report Error:', error.message);
-      res.status(500).json({
-        message: 'Server error while reporting complaint.'
+    if (!complaintId || !reportedBy || !reason) {
+      return res.status(400).json({
+        message: 'Missing required fields: complaintId, reportedBy, reason'
       });
     }
-  };
+
+    // Validate reason enum
+    const validReasons = [
+      'harassment_threats',
+      'hate_speech_discrimination',
+      'nudity_sexual_content',
+      'spam_scams',
+      'fake_information_misinformation',
+      'self_harm_suicide',
+      'violence_graphic_content',
+      'intellectual_property',
+      'impersonation_fake_accounts',
+      'child_safety',
+      'other_violations'
+    ];
+
+    if (!validReasons.includes(reason)) {
+      return res.status(400).json({
+        message: `Invalid reason. Must be one of: ${validReasons.join(', ')}`
+      });
+    }
+
+    // Check if complaint exists
+    const complaint = await Complaint.findByPk(complaintId);
+    if (!complaint) {
+      return res.status(404).json({ message: 'Complaint not found' });
+    }
+
+    // Check if user already reported this complaint
+    const existingReport = await ComplaintReport.findOne({
+      where: {
+        complaintId,
+        reportedBy
+      }
+    });
+
+    if (existingReport) {
+      await t.rollback();
+      return res.status(400).json({ message: 'You have already reported this complaint' });
+    }
+
+    // Create the report
+    const report = await ComplaintReport.create(
+      {
+        complaintId,
+        reportedBy,
+        reason,
+        description,
+        status: 'pending'
+      },
+      { transaction: t }
+    );
+
+    await t.commit();
+    res.status(201).json({
+      message: 'Complaint reported successfully',
+      report
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error('Report Error:', error.message);
+    res.status(500).json({
+      message: 'Server error while reporting complaint.'
+    });
+  }
+};
 /* =========================
    GET REPORTED COMPLAINTS (ADMIN)
 ========================= */
@@ -706,8 +848,8 @@ exports.updateReportStatus = async (req, res) => {
 
     const validStatuses = ['pending', 'reviewed', 'resolved', 'dismissed'];
     if (status && !validStatuses.includes(status)) {
-      return res.status(400).json({ 
-        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+      return res.status(400).json({
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
       });
     }
 

@@ -7,7 +7,7 @@ import { FileText, List, CheckCircle, Clock, PlusCircle, TrendingUp, AlertCircle
 import api from '../services/api';
 
 export default function HomeScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
-  const [stats, setStats] = useState({ total: 0, resolved: 0, pending: 0, inProgress: 0 });
+  const [stats, setStats] = useState({ total: 0, resolved: 0, pending: 0, inProgress: 0, appealed: 0, rejected: 0 });
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,8 +50,10 @@ export default function HomeScreen({ navigation, onLogout, darkMode, toggleDarkM
           const resolved = complaints.filter(c => ['resolved', 'closed', 'completed'].includes(c.currentStatus)).length;
           const pending = complaints.filter(c => c.currentStatus === 'pending').length;
           const inProgress = complaints.filter(c => ['in_progress', 'accepted', 'assigned'].includes(c.currentStatus)).length;
+          const appealed = complaints.filter(c => c.currentStatus === 'appealed').length;
+          const rejected = complaints.filter(c => c.currentStatus === 'rejected').length;
 
-          setStats({ total, resolved, pending, inProgress });
+          setStats({ total, resolved, pending, inProgress, appealed, rejected });
 
           // Get recent activity (top 3)
           setRecentActivity(complaints.slice(0, 3));
@@ -115,11 +117,13 @@ export default function HomeScreen({ navigation, onLogout, darkMode, toggleDarkM
         </View>
 
         <Text style={[styles.sectionTitle, darkMode && styles.textWhite]}>Overview</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between' }}>
           <StatCard icon={FileText} color="#1E88E5" bg="#EFF6FF" value={stats.total} label="Total" darkMode={darkMode} onPress={() => navigation.navigate('UserComplaintList', { title: 'All Complaints' })} />
           <StatCard icon={CheckCircle} color="#16A34A" bg="#F0FDF4" value={stats.resolved} label="Resolved" darkMode={darkMode} onPress={() => navigation.navigate('UserComplaintList', { statusFilter: 'resolved', title: 'Resolved Complaints' })} />
           <StatCard icon={Clock} color="#EA580C" bg="#FFF7ED" value={stats.pending} label="Pending" darkMode={darkMode} onPress={() => navigation.navigate('UserComplaintList', { statusFilter: 'pending', title: 'Pending Complaints' })} />
-          <StatCard icon={TrendingUp} color="#9333EA" bg="#FAF5FF" value={stats.inProgress} label="In Progress" darkMode={darkMode} onPress={() => navigation.navigate('UserComplaintList', { statusFilter: 'in_progress', title: 'In Progress' })} />
+          <StatCard icon={TrendingUp} color="#1E88E5" bg="#E0F2FE" value={stats.inProgress} label="In Progress" darkMode={darkMode} onPress={() => navigation.navigate('UserComplaintList', { statusFilter: 'in_progress', title: 'In Progress' })} />
+          <StatCard icon={AlertCircle} color="#9333EA" bg="#FAF5FF" value={stats.appealed} label="Appeals" darkMode={darkMode} onPress={() => navigation.navigate('UserComplaintList', { statusFilter: 'appealed', title: 'Your Appeals' })} />
+          <StatCard icon={AlertCircle} color="#EF4444" bg="#FEF2F2" value={stats.rejected} label="Rejected" darkMode={darkMode} onPress={() => navigation.navigate('UserComplaintList', { statusFilter: 'rejected', title: 'Rejected Issues' })} />
         </View>
 
         <Text style={[styles.sectionTitle, darkMode && styles.textWhite]}>Recent Activity</Text>
@@ -131,15 +135,15 @@ export default function HomeScreen({ navigation, onLogout, darkMode, toggleDarkM
               onPress={() => navigation.navigate('ComplaintDetails', { complaintId: complaint.id })}
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
                   <StatusIcon status={complaint.currentStatus} />
-                  <View>
+                  <View style={{ flex: 1 }}>
                     <Text style={[styles.activityTitle, darkMode && styles.textWhite]} numberOfLines={1}>{complaint.title}</Text>
                     <Text style={styles.activityDate}>{new Date(complaint.createdAt).toLocaleDateString()}</Text>
                   </View>
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: ['resolved', 'closed'].includes(complaint.currentStatus) ? '#D1FAE5' : '#FEF3C7' }]}>
-                  <Text style={[styles.statusText, { color: ['resolved', 'closed'].includes(complaint.currentStatus) ? '#065F46' : '#92400E' }]}>
+                <View style={[styles.statusBadge, { backgroundColor: ['resolved', 'closed'].includes(complaint.currentStatus) ? '#D1FAE5' : (complaint.currentStatus === 'rejected' ? '#FEE2E2' : '#FEF3C7') }]}>
+                  <Text style={[styles.statusText, { color: ['resolved', 'closed'].includes(complaint.currentStatus) ? '#065F46' : (complaint.currentStatus === 'rejected' ? '#991B1B' : '#92400E') }]}>
                     {complaint.currentStatus.replace('_', ' ').toUpperCase()}
                   </Text>
                 </View>
@@ -176,7 +180,7 @@ const styles = StyleSheet.create({
   cardDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
   cardText: { fontSize: 16, fontWeight: '600', color: '#374151' },
   sectionTitle: { fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginBottom: 16 },
-  statCard: { width: '48%', backgroundColor: 'white', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12 },
+  statCard: { width: '31%', backgroundColor: 'white', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 12, alignItems: 'center' },
 
   // Recent Activity
   activityCard: { backgroundColor: 'white', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 10 },

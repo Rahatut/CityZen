@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput, KeyboardAvoidingView } from 'react-native';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
-import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle } from 'lucide-react-native';
+import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle, Camera, X } from 'lucide-react-native';
+
 import axios from 'axios';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -20,6 +21,16 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const [reportReason, setReportReason] = useState('');
   const [reportDescription, setReportDescription] = useState('');
   const [reportSubmitting, setReportSubmitting] = useState(false);
+
+
+  // Appeal & Rating state
+  const [rating, setRating] = useState(0);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [appealVisible, setAppealVisible] = useState(false);
+  const [appealReason, setAppealReason] = useState('');
+  const [appealImages, setAppealImages] = useState([]);
+  const [appealSubmitting, setAppealSubmitting] = useState(false);
+
 
   const REPORT_REASONS = [
     { key: 'harassment_threats', label: 'Harassment & Threats' },
@@ -76,6 +87,75 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
     }
   };
 
+  const handleRating = async (stars) => {
+    try {
+      if (ratingSubmitting) return;
+      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
+      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
+      if (!userData || !userData.firebaseUid) return Alert.alert('Error', 'Please login to rate');
+
+      setRatingSubmitting(true);
+      await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/rate`, {
+        rating: stars,
+        citizenUid: userData.firebaseUid
+      });
+      setRating(stars);
+      setComplaint(prev => ({ ...prev, rating: stars }));
+      Alert.alert('Success', 'Thank you for your rating!');
+    } catch (e) {
+      console.error('Rating failed', e);
+      Alert.alert('Error', 'Failed to submit rating.');
+    } finally {
+      setRatingSubmitting(false);
+    }
+  };
+
+  const handlePickAppealImage = async () => {
+    const { status } = await import('expo-image-picker').then(m => m.requestCameraPermissionsAsync());
+    if (status !== 'granted') return Alert.alert('Permission Needed', 'Camera permission is required.');
+
+    const result = await import('expo-image-picker').then(m => m.launchCameraAsync({ quality: 0.7 }));
+    if (!result.canceled && result.assets) {
+      setAppealImages(prev => [...prev, result.assets[0].uri]);
+    }
+  };
+
+  const submitAppeal = async () => {
+    try {
+      if (appealSubmitting) return;
+      if (!appealReason) return Alert.alert('Error', 'Please provide a reason for appeal.');
+
+      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
+      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
+      if (!userData || !userData.firebaseUid) return Alert.alert('Error', 'Please login to appeal');
+
+      setAppealSubmitting(true);
+      const formData = new FormData();
+      formData.append('appealReason', appealReason);
+      formData.append('citizenUid', userData.firebaseUid);
+
+      appealImages.forEach((uri) => {
+        const filename = uri.split('/').pop();
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : `image`;
+        formData.append('images', { uri, name: filename, type });
+      });
+
+      await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/appeal`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setAppealVisible(false);
+      setComplaint(prev => ({ ...prev, currentStatus: 'appealed' }));
+      Alert.alert('Success', 'Appeal submitted successfully.');
+    } catch (e) {
+      console.error('Appeal failed', e);
+      Alert.alert('Error', 'Failed to submit appeal.');
+    } finally {
+      setAppealSubmitting(false);
+    }
+  };
+
   const openReport = () => {
     setReportReason('');
     setReportDescription('');
@@ -85,7 +165,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const submitReport = async () => {
     try {
       if (reportSubmitting) return; // Prevent double submission
-      
+
       const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
       const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
       if (!userData || !userData.firebaseUid) {
@@ -96,7 +176,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         Alert.alert('Error', 'Please select a reason');
         return;
       }
-      
+
       setReportSubmitting(true);
       await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/report`, {
         complaintId: complaintIdToFetch,
@@ -117,6 +197,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
     }
   };
 
+
   useEffect(() => {
     const fetchComplaint = async () => {
       if (!complaintIdToFetch) {
@@ -134,6 +215,8 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         });
         setComplaint(response.data);
         setUpvotes(response.data.upvotes || 0); // Initialize upvotes
+        setRating(response.data.rating || 0);
+
       } catch (err) {
         console.error('Error fetching complaint:', err);
         let message = 'Failed to load complaint details';
@@ -197,7 +280,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
           </View>
 
           {/* Remarks & Evidence */}
-          {(complaint?.statusNotes || (complaint?.images && complaint?.images.length > 1)) && (
+          {(complaint?.statusNotes || (complaint?.images && complaint?.images.length > 0)) && (
             <View style={[styles.card, darkMode && styles.cardDark]}>
               <Text style={[styles.sectionHeader, darkMode && styles.textWhite]}>Authority Updates</Text>
 
@@ -210,9 +293,48 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
                 </View>
               ) : null}
 
-              {/* Placeholder for Authority Evidence - assuming if more than 1 image, others are evidence, or specific field needs to be added to backend later. 
-                      For now, just showing status notes is the primary request. 
-                  */}
+              {complaint?.images?.filter(img => img.type === 'progress' || img.type === 'resolution' || (img.type === undefined && complaint.images.indexOf(img) > 0)).length > 0 && (
+                <View>
+                  <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 8 }]}>WORK EVIDENCE</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {complaint.images.filter(img => img.type === 'progress' || img.type === 'resolution' || (img.type === undefined && complaint.images.indexOf(img) > 0)).map((img, idx) => (
+                      <Image key={idx} source={{ uri: img.imageURL }} style={{ width: 120, height: 120, borderRadius: 8, marginRight: 10 }} />
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Rating & Appeal Section */}
+          {(complaint?.currentStatus === 'resolved' || complaint?.currentStatus === 'completed' || complaint?.currentStatus === 'rejected') && (
+            <View style={[styles.card, darkMode && styles.cardDark]}>
+              <Text style={[styles.sectionHeader, darkMode && styles.textWhite]}>Resolution Actions</Text>
+
+              {(complaint.currentStatus === 'resolved' || complaint.currentStatus === 'completed') && !complaint.rating && (
+                <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                  <Text style={[styles.label, { color: '#6B7280', marginBottom: 10 }]}>Rate the work resolution:</Text>
+                  <View style={{ flexDirection: 'row', gap: 5 }}>
+                    {[1, 2, 3, 4, 5].map(star => (
+                      <TouchableOpacity key={star} onPress={() => handleRating(star)}>
+                        <Heart size={30} color={star <= rating ? "#F59E0B" : "#D1D5DB"} fill={star <= rating ? "#F59E0B" : "none"} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {complaint.rating > 0 && (
+                <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                  <Text style={[styles.label, { color: '#6B7280' }]}>Your Rating: {complaint.rating} / 5</Text>
+                </View>
+              )}
+
+              {(complaint.currentStatus === 'resolved' || complaint.currentStatus === 'rejected') && (
+                <TouchableOpacity style={styles.appealBtn} onPress={() => setAppealVisible(true)}>
+                  <Text style={styles.appealBtnText}>Appeal this Decision</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 
@@ -230,6 +352,54 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
           </View>
         </View>
       </ScrollView>
+      {/* Appeal Modal */}
+      <Modal visible={appealVisible} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, darkMode && styles.cardDark]}>
+            <Text style={[styles.modalTitle, darkMode && styles.textWhite]}>Appeal Complaint</Text>
+            <Text style={[styles.modalSubtitle, darkMode && styles.textWhite]}>Explain why you are dissatisfied with the resolution/rejection.</Text>
+
+            <RNTextInput
+              placeholder="Appeal reason..."
+              multiline
+              style={[styles.textArea, darkMode && styles.textWhite, { minHeight: 120 }]}
+              value={appealReason}
+              onChangeText={setAppealReason}
+            />
+
+            <TouchableOpacity style={styles.appealCameraBtn} onPress={handlePickAppealImage}>
+              <Camera size={24} color="#1E88E5" />
+              <Text style={{ color: '#1E88E5', fontWeight: 'bold', marginLeft: 10 }}>Attach Evidence (Optional)</Text>
+            </TouchableOpacity>
+
+            {appealImages.length > 0 && (
+              <ScrollView horizontal style={{ marginBottom: 15 }}>
+                {appealImages.map((uri, idx) => (
+                  <View key={idx} style={{ position: 'relative', marginRight: 10 }}>
+                    <Image source={{ uri }} style={{ width: 70, height: 70, borderRadius: 8 }} />
+                    <TouchableOpacity
+                      style={{ position: 'absolute', top: -5, right: -5, backgroundColor: 'red', borderRadius: 10 }}
+                      onPress={() => setAppealImages(prev => prev.filter((_, i) => i !== idx))}
+                    >
+                      <X size={14} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            <View style={styles.rowBetween}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setAppealVisible(false)}>
+                <Text>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.submitAppealBtn} onPress={submitAppeal} disabled={appealSubmitting}>
+                <Text style={{ color: 'white', fontWeight: 'bold' }}>{appealSubmitting ? 'Submitting...' : 'Submit Appeal'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* Report Modal */}
       <Modal visible={reportVisible} animationType="slide" transparent onRequestClose={() => setReportVisible(false)}>
         <View style={styles.modalBackdrop}>
@@ -259,13 +429,13 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
               style={[styles.textArea, darkMode && styles.textWhite]}
               multiline
             />
-            <View style={[styles.rowBetween, { marginTop: 12 }] }>
+            <View style={[styles.rowBetween, { marginTop: 12 }]}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setReportVisible(false)}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.submitBtn, (!reportReason || reportSubmitting) && { opacity: 0.5 }]} 
-                onPress={submitReport} 
+              <TouchableOpacity
+                style={[styles.submitBtn, (!reportReason || reportSubmitting) && { opacity: 0.5 }]}
+                onPress={submitReport}
                 disabled={!reportReason || reportSubmitting}
               >
                 <Text style={styles.submitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
@@ -274,6 +444,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
           </View>
         </View>
       </Modal>
+
       <BottomNav navigation={navigation} darkMode={darkMode} />
     </View>
   );
@@ -298,7 +469,7 @@ const styles = StyleSheet.create({
   actionButton: { flexDirection: 'row', alignItems: 'center' },
   actionText: { fontSize: 14 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  modalBackdrop: { flex:1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   modalCard: { width: '100%', maxWidth: 520, backgroundColor: 'white', borderRadius: 12, padding: 16 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
   modalSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
@@ -321,4 +492,8 @@ const styles = StyleSheet.create({
   errorText: { color: '#DC2626' },
   retryBtn: { marginTop: 8, backgroundColor: '#EF4444', paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
   retryText: { color: 'white', fontWeight: 'bold' },
+  appealBtn: { backgroundColor: '#EF4444', padding: 15, borderRadius: 10, alignItems: 'center' },
+  appealBtnText: { color: 'white', fontWeight: 'bold' },
+  appealCameraBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F9FF', padding: 12, borderRadius: 10, marginVertical: 15, borderStyle: 'dashed', borderWidth: 1, borderColor: '#1E88E5' },
+  submitAppealBtn: { backgroundColor: '#1E88E5', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
 });

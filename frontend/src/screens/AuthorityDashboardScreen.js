@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  FlatList, Image, TextInput, Alert, Modal, KeyboardAvoidingView, Platform
+  FlatList, Image, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, ActivityIndicator
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+
+
 import Navigation from '../components/Navigation';
 import {
   BarChart2, ClipboardList, User, MapPin, Clock,
@@ -21,7 +25,10 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [actionType, setActionType] = useState('');
   const [note, setNote] = useState('');
-  const [hasPhoto, setHasPhoto] = useState(false);
+  const [images, setImages] = useState([]); // Array of uris
+  const [profileData, setProfileData] = useState(null);
+
+
 
   const rejectionShortcuts = ["Inaccurate Location", "Duplicate Report", "Private Property", "Outside Jurisdiction"];
 
@@ -44,29 +51,31 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
       // By default getting all, sorted by upvotes (backend default)
       const response = await api.get('/complaints?limit=100');
       if (response.data && response.data.complaints) {
-        const mapped = response.data.complaints.map(c => {
-          const statusMap = {
-            'pending': 'Pending',
-            'accepted': 'Accepted',
-            'in_progress': 'In Progress',
-            'resolved': 'Resolved',
-            'rejected': 'Rejected',
-            'completed': 'Completed'
-          };
-          return {
-            id: c.id,
-            title: c.title,
-            location: `Lat: ${c.latitude}, Long: ${c.longitude}`,
-            ward: 'Unknown Ward', // Placeholder
-            status: statusMap[c.currentStatus] || c.currentStatus.charAt(0).toUpperCase() + c.currentStatus.slice(1),
-            time: new Date(c.createdAt).toLocaleDateString(),
-            createdAt: c.createdAt, // Keep raw date for filtering
-            upvotes: c.upvotes || 0,
-            category: c.Category ? c.Category.name : 'Uncategorized',
-            description: c.description,
-            citizenProof: c.images && c.images.length > 0 ? c.images[0].imageURL : 'https://via.placeholder.com/400'
-          };
-        });
+        const mapped = response.data.complaints
+          .filter(c => c.currentStatus !== 'appealed') // Hide appealed from authorities
+          .map(c => {
+            const statusMap = {
+              'pending': 'Pending',
+              'accepted': 'Accepted',
+              'in_progress': 'In Progress',
+              'resolved': 'Resolved',
+              'rejected': 'Rejected',
+              'completed': 'Completed'
+            };
+            return {
+              id: c.id,
+              title: c.title,
+              location: `Lat: ${c.latitude}, Long: ${c.longitude}`,
+              ward: 'Unknown Ward', // Placeholder
+              status: statusMap[c.currentStatus] || c.currentStatus.charAt(0).toUpperCase() + c.currentStatus.slice(1),
+              time: new Date(c.createdAt).toLocaleDateString(),
+              createdAt: c.createdAt, // Keep raw date for filtering
+              upvotes: c.upvotes || 0,
+              category: c.Category ? c.Category.name : 'Uncategorized',
+              description: c.description,
+              citizenProof: c.images && c.images.length > 0 ? c.images[0].imageURL : 'https://via.placeholder.com/400'
+            };
+          });
         setComplaints(mapped);
       }
     } catch (error) {
@@ -87,10 +96,26 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
     }
   };
 
+  const fetchProfile = async () => {
+    try {
+      const userDataStr = await AsyncStorage.getItem('userData');
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr);
+        const response = await api.get(`/users/${userData.firebaseUid}`);
+        setProfileData(response.data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch profile", error);
+    }
+  };
+
+
   React.useEffect(() => {
     fetchComplaints();
     fetchCategories();
+    fetchProfile();
   }, []);
+
 
   const kpis = [
     {
@@ -128,24 +153,32 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
       return;
     }
     if (actionType === 'Reject' && !note) return Alert.alert("Required", "Please provide a rejection reason.");
-    if ((actionType === 'Resolve' || actionType === 'Progress') && !hasPhoto) return Alert.alert("Evidence Required", "Please capture a work-site photo.");
+    if ((actionType === 'Resolve' || actionType === 'Progress') && (!images || images.length === 0)) return Alert.alert("Evidence Required", "Please capture a work-site photo.");
 
     // Status Validations
     const statusMapBackend = { 'Reject': 'rejected', 'Progress': 'in_progress', 'Resolve': 'resolved', 'Accept': 'accepted' };
     const statusMapUI = { 'rejected': 'Rejected', 'in_progress': 'In Progress', 'resolved': 'Resolved', 'accepted': 'Accepted' };
 
-    // Determine Backend Status
-    // If statusOverride is provided (e.g. 'Accepted'), convert to lowercase for backend, else use map
     let newStatusBackend = statusOverride ? statusOverride.toLowerCase() : statusMapBackend[actionType];
-
-    // Safety check just in case override was "Accepted" -> "accepted"
-    if (newStatusBackend === 'accepted') newStatusBackend = 'accepted';
 
     try {
       console.log(`Sending PATCH for ID ${targetItem.id} with status: ${newStatusBackend}`);
-      await api.patch(`/complaints/${targetItem.id}/status`, {
-        currentStatus: newStatusBackend,
-        statusNotes: note || ''
+
+      const formData = new FormData();
+      formData.append('currentStatus', newStatusBackend);
+      formData.append('statusNotes', note || '');
+
+      if (images.length > 0) {
+        images.forEach((uri, index) => {
+          const filename = uri.split('/').pop();
+          const match = /\.(\w+)$/.exec(filename);
+          const type = match ? `image/${match[1]}` : `image`;
+          formData.append('images', { uri, name: filename, type });
+        });
+      }
+
+      await api.patch(`/complaints/${targetItem.id}/status`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
 
       const newStatusUI = statusMapUI[newStatusBackend] || 'Pending';
@@ -155,13 +188,30 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
 
       setActionModalVisible(false);
       setNote('');
-      setHasPhoto(false);
+      setImages([]);
       if (activeTab === 'details') setActiveTab('work');
 
     } catch (error) {
       console.error("Update failed", error);
       const errorMsg = error.response?.data?.message || error.message || "Failed to update status on server.";
       Alert.alert("Update Failed", errorMsg);
+    }
+  };
+
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Needed', 'Camera permission is required to take proof photos.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      setImages(prev => [...prev, result.assets[0].uri]);
     }
   };
 
@@ -212,10 +262,12 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
         <FlatList
           data={data}
           keyExtractor={item => item.id}
+          contentContainerStyle={{ paddingBottom: 150 }}
+          style={{ flex: 1 }}
           renderItem={({ item }) => (
             <View style={[styles.workCard, darkMode && styles.cardDark]}>
               <TouchableOpacity onPress={() => { setSelectedItem(item); setActiveTab('details'); }}>
-                <Text style={[styles.workTitle, darkMode && styles.textWhite]}>{item.title}</Text>
+                <Text style={[styles.workTitle, darkMode && styles.textWhite]} numberOfLines={1}>{item.title}</Text>
                 <Text style={styles.workLoc}>{item.location} • {item.ward}</Text>
               </TouchableOpacity>
               <View style={styles.cardDivider} />
@@ -308,6 +360,8 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
         </View>
         <FlatList
           data={filteredData}
+          contentContainerStyle={{ paddingBottom: 150 }}
+          style={{ flex: 1 }}
           renderItem={({ item }) => {
             const getStatusColor = (status) => {
               switch (status) {
@@ -333,7 +387,7 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
               >
                 <View style={{ flex: 1 }}>
                   <View style={styles.rowTop}>
-                    <Text style={[styles.ledgerTitle, darkMode && styles.textWhite]}>{item.title}</Text>
+                    <Text style={[styles.ledgerTitle, darkMode && styles.textWhite, { flex: 1, marginRight: 10 }]} numberOfLines={1}>{item.title}</Text>
                     <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
                       <Text style={[styles.statusBadgeText, { color: colors.text }]}>{item.status}</Text>
                     </View>
@@ -359,11 +413,53 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
         {activeTab === 'ledger' && renderLedger()}
         {activeTab === 'work' && renderWorkQueue()}
         {activeTab === 'profile' && (
-          <ScrollView style={styles.paddedContent}>
+          <ScrollView style={styles.paddedContent} contentContainerStyle={{ paddingBottom: 40 }}>
             <Text style={[styles.screenTitle, darkMode && styles.textWhite]}>Authority Identity</Text>
-            <View style={[styles.idCard, { backgroundColor: darkMode ? '#1F2937' : '#1E40AF' }]}><View style={styles.idHeader}><View style={styles.govtBadge}><ShieldCheck size={16} color="white" /><Text style={styles.govtText}>Official Personnel</Text></View><Award size={24} color="#FBBF24" /></View><View style={styles.idBody}><View style={styles.idAvatar}><HardHat size={40} color="#1E40AF" /></View><View style={{ marginLeft: 20 }}><Text style={styles.idName}>Ahmed Bin Rahman</Text><Text style={styles.idDept}>Executive Engineer, DWASA</Text><Text style={styles.idWard}>Primary Zone: Ward 15 & 19</Text></View></View><View style={styles.idFooter}><View style={styles.idInfoItem}><Phone size={12} color="white" /><Text style={styles.idInfoText}>+880 1711-XXXXXX</Text></View><View style={styles.idInfoItem}><Mail size={12} color="white" /><Text style={styles.idInfoText}>a.rahman@dwasa.gov.bd</Text></View></View></View>
-            <View style={styles.statsRow}><View style={[styles.statBox, darkMode && styles.cardDark]}><Text style={styles.statSub}>Total Handled</Text><Text style={[styles.statNum, darkMode && styles.textWhite]}>412</Text></View><View style={[styles.statBox, darkMode && styles.cardDark]}><Text style={styles.statSub}>Efficiency</Text><Text style={[styles.statNum, { color: '#10B981' }]}>94%</Text></View></View>
-            <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}><LogOut size={20} color="white" /><Text style={styles.logoutBtnText}>Secure Sign Out</Text></TouchableOpacity>
+            <View style={[styles.idCard, { backgroundColor: darkMode ? '#1F2937' : '#1E40AF' }]}>
+              <View style={styles.idHeader}>
+                <View style={styles.govtBadge}>
+                  <ShieldCheck size={16} color="white" />
+                  <Text style={styles.govtText}>Official Personnel</Text>
+                </View>
+                <Award size={24} color="#FBBF24" />
+              </View>
+              <View style={styles.idBody}>
+                <View style={styles.idAvatar}>
+                  <HardHat size={40} color="#1E40AF" />
+                </View>
+                <View style={{ marginLeft: 20, flex: 1 }}>
+                  <Text style={styles.idName}>{profileData?.fullName || 'Loading...'}</Text>
+                  <Text style={styles.idDept}>{profileData?.Authority?.department || 'Official Personnel'}</Text>
+                  <Text style={styles.idWard}>Primary Zone: Ward {profileData?.Authority?.ward || 'N/A'}</Text>
+                </View>
+              </View>
+              <View style={styles.idFooter}>
+                <View style={styles.idInfoItem}>
+                  <Phone size={12} color="white" />
+                  <Text style={styles.idInfoText}>{profileData?.phone || 'No phone listed'}</Text>
+                </View>
+                <View style={styles.idInfoItem}>
+                  <Mail size={12} color="white" />
+                  <Text style={styles.idInfoText}>{profileData?.email || 'No email listed'}</Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.statsRow}>
+              <View style={[styles.statBox, darkMode && styles.cardDark]}>
+                <Text style={styles.statSub}>Handled by Dept</Text>
+                <Text style={[styles.statNum, darkMode && styles.textWhite]}>{complaints.length}</Text>
+              </View>
+              <View style={[styles.statBox, darkMode && styles.cardDark]}>
+                <Text style={styles.statSub}>Resolved</Text>
+                <Text style={[styles.statNum, { color: '#10B981' }]}>
+                  {complaints.filter(c => c.status === 'Resolved' || c.status === 'Completed').length}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
+              <LogOut size={20} color="white" />
+              <Text style={styles.logoutBtnText}>Secure Sign Out</Text>
+            </TouchableOpacity>
           </ScrollView>
         )}
         {activeTab === 'details' && renderDetails()}
@@ -480,7 +576,31 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
           <View style={[styles.modalContent, darkMode && styles.cardDark]}>
             <Text style={[styles.modalTitle, darkMode && styles.textWhite]}>{actionType === 'Reject' ? 'Rejection Reason' : 'Work Proof Upload'}</Text>
             {actionType === 'Reject' && (<View style={styles.shortcutWrapper}>{rejectionShortcuts.map(s => (<TouchableOpacity key={s} style={styles.shortcutChip} onPress={() => setNote(s)}><Text style={styles.shortcutText}>{s}</Text></TouchableOpacity>))}</View>)}
-            {(actionType === 'Progress' || actionType === 'Resolve') && (<TouchableOpacity style={[styles.uploadBox, hasPhoto && { borderColor: '#10B981' }]} onPress={() => setHasPhoto(true)}><Camera size={30} color={hasPhoto ? "#10B981" : "#1E88E5"} /><Text style={{ color: hasPhoto ? '#10B981' : '#1E88E5', fontWeight: 'bold', marginTop: 10 }}>{hasPhoto ? 'Photo Attached' : 'Capture Site Photo'}</Text></TouchableOpacity>)}
+            {(actionType === 'Progress' || actionType === 'Resolve') && (
+              <View>
+                <TouchableOpacity style={[styles.uploadBox, images.length > 0 && { borderColor: '#10B981' }]} onPress={handlePickImage}>
+                  <Camera size={30} color={images.length > 0 ? "#10B981" : "#1E88E5"} />
+                  <Text style={{ color: images.length > 0 ? '#10B981' : '#1E88E5', fontWeight: 'bold', marginTop: 10 }}>
+                    {images.length > 0 ? `${images.length} Photo(s) Captured` : 'Capture Site Photo'}
+                  </Text>
+                </TouchableOpacity>
+                {images.length > 0 && (
+                  <ScrollView horizontal style={{ marginBottom: 15 }} showsHorizontalScrollIndicator={false}>
+                    {images.map((img, idx) => (
+                      <View key={idx} style={{ position: 'relative', marginRight: 10 }}>
+                        <Image source={{ uri: img }} style={{ width: 80, height: 80, borderRadius: 8 }} />
+                        <TouchableOpacity
+                          style={{ position: 'absolute', top: -5, right: -5, backgroundColor: 'red', borderRadius: 10, padding: 2 }}
+                          onPress={() => setImages(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X size={12} color="white" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            )}
             <TextInput style={[styles.modalInput, darkMode && styles.inputDark]} placeholder="Internal remarks..." multiline value={note} onChangeText={setNote} />
             <View style={styles.modalActionButtons}><TouchableOpacity style={styles.cancelBtn} onPress={() => setActionModalVisible(false)}><Text>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: actionType === 'Reject' ? '#EF4444' : '#10B981' }]} onPress={() => handleFinalSubmit()}><Text style={{ color: 'white', fontWeight: 'bold' }}>Submit {actionType}</Text></TouchableOpacity></View>
@@ -501,7 +621,7 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   darkContainer: { backgroundColor: '#111827' },
-  paddedContent: { padding: 16 },
+  paddedContent: { flex: 1, padding: 16 },
   textWhite: { color: 'white' },
   textGray: { color: '#9CA3AF' },
   screenTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 20 },
