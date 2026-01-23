@@ -8,7 +8,8 @@ import axios from 'axios';
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function ComplaintDetailsScreen({ route, navigation, onLogout, darkMode, toggleDarkMode }) {
-  const { id } = route.params || {};
+  const { id, complaintId } = route.params || {};
+  const complaintIdToFetch = id || complaintId;
   const [upvotes, setUpvotes] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -41,7 +42,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         return;
       }
 
-      const res = await axios.post(`${API_URL}/api/complaints/${id}/upvote`, { citizenUid: userData.firebaseUid });
+      const res = await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/upvote`, { citizenUid: userData.firebaseUid });
       if (res.data && res.data.upvotes !== undefined) {
         setComplaint(prev => ({ ...prev, upvotes: res.data.upvotes, hasUpvoted: true }));
         setUpvotes(res.data.upvotes); // Sync local state
@@ -58,7 +59,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
 
   useEffect(() => {
     const fetchComplaint = async () => {
-      if (!id) {
+      if (!complaintIdToFetch) {
         setError('No complaint ID provided');
         setLoading(false);
         return;
@@ -67,7 +68,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         setError(null);
         // We need to pass citizenUid to get correct upvote status if backend supports it (next step)
         // For now, just basic fetch
-        const response = await axios.get(`${API_URL}/api/complaints/${id}`, {
+        const response = await axios.get(`${API_URL}/api/complaints/${complaintIdToFetch}`, {
           headers: { 'bypass-tunnel-reminder': 'true' },
           timeout: 10000,
         });
@@ -85,7 +86,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
       }
     };
     fetchComplaint();
-  }, [id, retryTick]);
+  }, [complaintIdToFetch, retryTick]);
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
@@ -127,6 +128,26 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
             </TouchableOpacity>
           </View>
 
+          {/* Remarks & Evidence */}
+          {(complaint?.statusNotes || (complaint?.images && complaint?.images.length > 1)) && (
+            <View style={[styles.card, darkMode && styles.cardDark]}>
+              <Text style={[styles.sectionHeader, darkMode && styles.textWhite]}>Authority Updates</Text>
+
+              {complaint?.statusNotes ? (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 4 }]}>INTERNAL REMARKS / REASON</Text>
+                  <View style={{ backgroundColor: darkMode ? '#374151' : '#F3F4F6', padding: 12, borderRadius: 8 }}>
+                    <Text style={{ color: darkMode ? 'white' : '#1F2937' }}>{complaint.statusNotes}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Placeholder for Authority Evidence - assuming if more than 1 image, others are evidence, or specific field needs to be added to backend later. 
+                      For now, just showing status notes is the primary request. 
+                  */}
+            </View>
+          )}
+
           {/* Timeline */}
           <View style={[styles.card, darkMode && styles.cardDark]}>
             <Text style={[styles.sectionHeader, darkMode && styles.textWhite]}>Status Timeline</Text>
@@ -158,6 +179,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: 'white', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E5E7EB', elevation: 2 },
   cardDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
   title: { fontSize: 22, fontWeight: 'bold', color: '#1F2937', marginBottom: 8 },
+  sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   description: { color: '#4B5563', lineHeight: 22, marginBottom: 20 },
   upvoteBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB', gap: 8 },

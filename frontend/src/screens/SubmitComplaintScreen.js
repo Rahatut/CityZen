@@ -5,25 +5,26 @@ import BottomNav from '../components/BottomNav';
 import { useComplaint } from '../context/ComplaintContext';
 import axios from 'axios';
 import { auth } from '../config/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const OPENROUTER_API_URL = process.env.EXPO_PUBLIC_OPENROUTER_API_URL;
 
 
 export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
-      const {
-      images,
-      location,
-      title,
-      setTitle,
-      description,
-      setDescription,
-      selectedCategory,
-      setAssignedAuthorities, // Destructure setAssignedAuthorities
-    } = useComplaint();
+  const {
+    images,
+    location,
+    title,
+    setTitle,
+    description,
+    setDescription,
+    selectedCategory,
+    setAssignedAuthorities, // Destructure setAssignedAuthorities
+  } = useComplaint();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
-  
+
   const [recommendedAuthorities, setRecommendedAuthorities] = useState([]);
   const [chosenAuthorities, setChosenAuthorities] = useState([]);
   const [loadingRecommendation, setLoadingRecommendation] = useState(false);
@@ -65,11 +66,11 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
 
     // Debounce the fetch
     const handler = setTimeout(() => {
-        fetchRecommendedAuthority();
+      fetchRecommendedAuthority();
     }, 1000); // 1 second debounce
 
     return () => {
-        clearTimeout(handler);
+      clearTimeout(handler);
     };
   }, [selectedCategory, location, description]);
 
@@ -96,11 +97,29 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
     formData.append('description', description);
     formData.append('latitude', location.latitude);
     formData.append('longitude', location.longitude);
-    formData.append('citizenUid', auth.currentUser?.uid);
+    // Get UID from AsyncStorage to ensure consistency with HomeScreen
+    // Get UID from AsyncStorage to ensure consistency with HomeScreen
+    let uid = auth.currentUser?.uid;
+    try {
+      const userDataStr = await AsyncStorage.getItem('userData');
+      if (userDataStr) {
+        const userData = JSON.parse(userDataStr);
+        console.log("SubmitComplaint - Loaded UserData:", userData);
+        // Match HomeScreen logic exactly: uid || id
+        // But also fallback to firebaseUid if present, or auth.currentUser
+        uid = userData.uid || userData.id || userData.firebaseUid || uid;
+      }
+    } catch (e) {
+      console.error("Failed to get userData from storage", e);
+    }
+
+    console.log("Submitting Complaint with UID:", uid);
+
+    formData.append('citizenUid', uid);
     formData.append('categoryId', selectedCategory.id);
     formData.append('chosenAuthorities', JSON.stringify(chosenAuthorities));
 
-    if (!auth.currentUser?.uid) {
+    if (!uid) {
       Alert.alert('Error', 'Could not identify user. Please log in again.');
       setIsSubmitting(false);
       return;
@@ -130,8 +149,8 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
 
         // Map chosen authority IDs to their names and save to context
         const assignedAuthorityNames = chosenAuthorities.map(chosenId => {
-            const authority = recommendedAuthorities.find(rec => rec.authorityCompanyId === chosenId);
-            return authority ? authority.authorityName : 'Unknown Authority';
+          const authority = recommendedAuthorities.find(rec => rec.authorityCompanyId === chosenId);
+          return authority ? authority.authorityName : 'Unknown Authority';
         });
         setAssignedAuthorities(assignedAuthorityNames);
 
@@ -141,7 +160,7 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
       }
     } catch (error) {
       console.error('Submit Complaint Error:', error.response?.data || error.message);
-      
+
       let errorMessage = 'An unexpected error occurred.';
       if (error.code === 'ECONNABORTED') {
         errorMessage = 'Network timeout. Please check your connection and try again.';
@@ -150,7 +169,7 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
       } else {
         errorMessage = error.response?.data?.message || 'An unexpected error occurred.';
       }
-      
+
       Alert.alert('Submission Failed', errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -190,33 +209,33 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
 
           {/* AI Recommended Authorities */}
           {loadingRecommendation && <ActivityIndicator style={{ marginVertical: 16 }} color="#1E88E5" />}
-           {recommendedAuthorities.length > 0 && (
-             <View style={{ marginTop: 16 }}>
-               <Text style={[styles.label, darkMode && styles.textWhite]}>AI Recommended Authorities</Text>
-               {recommendedAuthorities.map((authority, index) => (
-                 <TouchableOpacity 
-                    key={index} 
-                    onPress={() => handleChooseAuthority(authority.authorityCompanyId)}
-                    style={[
-                        styles.card, 
-                        darkMode && styles.cardDark, 
-                        { padding: 16, marginBottom: 12 },
-                        chosenAuthorities.includes(authority.authorityCompanyId) && styles.selectedCard
-                    ]}
-                  >
-                   <Text style={[styles.dropdownText, darkMode && styles.textWhite, { fontWeight: 'bold' }]}>
-                     {authority.authorityName}
-                   </Text>
-                   <Text style={[styles.readOnlyLabel, darkMode && styles.textGray, { marginTop: 4 }]}>
-                     {authority.reason}
-                    </Text>
-                   {/*<Text style={[styles.readOnlyLabel, darkMode && styles.textGray, { marginTop: 4, fontStyle: 'italic' }]}>
+          {recommendedAuthorities.length > 0 && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={[styles.label, darkMode && styles.textWhite]}>AI Recommended Authorities</Text>
+              {recommendedAuthorities.map((authority, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => handleChooseAuthority(authority.authorityCompanyId)}
+                  style={[
+                    styles.card,
+                    darkMode && styles.cardDark,
+                    { padding: 16, marginBottom: 12 },
+                    chosenAuthorities.includes(authority.authorityCompanyId) && styles.selectedCard
+                  ]}
+                >
+                  <Text style={[styles.dropdownText, darkMode && styles.textWhite, { fontWeight: 'bold' }]}>
+                    {authority.authorityName}
+                  </Text>
+                  <Text style={[styles.readOnlyLabel, darkMode && styles.textGray, { marginTop: 4 }]}>
+                    {authority.reason}
+                  </Text>
+                  {/*<Text style={[styles.readOnlyLabel, darkMode && styles.textGray, { marginTop: 4, fontStyle: 'italic' }]}>
                      Confidence: {(authority.confidence * 100).toFixed(0)}%
                     </Text>*/}
-                 </TouchableOpacity>
-               ))}
-             </View>
-           )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
