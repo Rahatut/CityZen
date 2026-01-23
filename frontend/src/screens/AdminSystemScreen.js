@@ -1,16 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert, TextInput, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
 import { Tags, Building2, UserX, ArrowLeft, Trash2, Plus, UserCheck } from 'lucide-react-native';
-import api from '../services/api';
 
 export default function AdminSystemScreen({ darkMode }) {
   const [view, setView] = useState('main'); 
-  const [categories, setCategories] = useState([]);
-  const [catLoading, setCatLoading] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [depts, setDepts] = useState([]);
-  const [deptLoading, setDeptLoading] = useState(false);
-  const [newDeptName, setNewDeptName] = useState('');
+  const [categories] = useState(['Water Leak', 'Waste', 'Roads', 'Power']);
+  const [depts] = useState(['DWASA', 'City Corp', 'DESCO']);
   
   // Anonymous Data with Strikes
   const [offenders] = useState([
@@ -25,137 +20,6 @@ export default function AdminSystemScreen({ darkMode }) {
     Alert.alert("Lift Ban", `Unban ${id}?`, [
       { text: "Cancel" },
       { text: "Lift Ban", onPress: () => setBannedUsers(bannedUsers.filter(u => u.id !== id)) }
-    ]);
-  };
-
-  // Fetch categories from API
-  const loadCategories = async () => {
-    try {
-      setCatLoading(true);
-      const res = await api.get('/complaints/categories');
-      const payload = res.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.categories || payload?.data?.categories || [];
-      setCategories(list);
-    } catch (err) {
-      console.log('Failed to load categories', err?.response?.data || err.message);
-      Alert.alert('Error', 'Could not load categories');
-    } finally {
-      setCatLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadCategories();
-    loadDepartments();
-  }, []);
-
-  // Fetch departments from API
-  const loadDepartments = async () => {
-    try {
-      setDeptLoading(true);
-      const res = await api.get('/authority-companies');
-      const payload = res.data;
-      const list = Array.isArray(payload)
-        ? payload
-        : payload?.companies || payload?.data?.companies || [];
-      setDepts(list);
-    } catch (err) {
-      console.log('Failed to load departments', err?.response?.data || err.message);
-      Alert.alert('Error', 'Could not load departments');
-    } finally {
-      setDeptLoading(false);
-    }
-  };
-
-  const addDepartment = async () => {
-    const name = newDeptName.trim();
-    if (!name) {
-      Alert.alert('Validation', 'Enter a department name');
-      return;
-    }
-    try {
-      setDeptLoading(true);
-      const res = await api.post('/authority-companies', { name, description: '' });
-      const created = res.data?.company || res.data;
-      if (created) {
-        setDepts((prev) => [...prev, created]);
-        setNewDeptName('');
-      }
-    } catch (err) {
-      const message = err?.response?.data?.message || 'Could not add department';
-      Alert.alert('Error', message);
-    } finally {
-      setDeptLoading(false);
-    }
-  };
-
-  const deleteDepartment = async (id) => {
-    Alert.alert('Delete Department', 'Are you sure you want to delete this department?', [
-      { text: 'Cancel' },
-      {
-        text: 'Delete',
-        onPress: async () => {
-          try {
-            setDeptLoading(true);
-            await api.delete(`/authority-companies/${id}`);
-            setDepts((prev) => prev.filter((d) => `${d.id}` !== `${id}`));
-            Alert.alert('Success', 'Department deleted');
-          } catch (err) {
-            const message = err?.response?.data?.message || 'Could not remove department';
-            Alert.alert('Error', message);
-          } finally {
-            setDeptLoading(false);
-          }
-        },
-        style: 'destructive'
-      }
-    ]);
-  };
-
-  const addCategory = async () => {
-    const name = newCategoryName.trim();
-    if (!name) {
-      Alert.alert('Validation', 'Enter a category name');
-      return;
-    }
-    try {
-      setCatLoading(true);
-      const res = await api.post('/complaints/categories', { name });
-      const created = res.data?.category || res.data;
-      if (created) {
-        setCategories((prev) => [...prev, created]);
-        setNewCategoryName('');
-      }
-    } catch (err) {
-      const message = err?.response?.data?.message || 'Could not add category';
-      Alert.alert('Error', message);
-    } finally {
-      setCatLoading(false);
-    }
-  };
-
-  const deleteCategory = async (id) => {
-    Alert.alert('Delete Category', 'Are you sure you want to delete this category?', [
-      { text: 'Cancel' },
-      {
-        text: 'Delete',
-        onPress: async () => {
-          try {
-            setCatLoading(true);
-            await api.delete(`/complaints/categories/${id}`);
-            setCategories((prev) => prev.filter((c) => `${c.id}` !== `${id}`));
-            Alert.alert('Success', 'Category deleted');
-          } catch (err) {
-            const message = err?.response?.data?.message || 'Could not remove category';
-            Alert.alert('Error', message);
-          } finally {
-            setCatLoading(false);
-          }
-        },
-        style: 'destructive'
-      }
     ]);
   };
 
@@ -179,52 +43,12 @@ export default function AdminSystemScreen({ darkMode }) {
   if (view === 'cat' || view === 'dept') return (
     <View style={styles.container}>
       <SubHeader title={view === 'cat' ? "Categories" : "Departments"} />
-      {view === 'cat' && (
-        <View style={styles.catForm}>
-          <TextInput
-            style={[styles.input, darkMode && styles.inputDark]}
-            placeholder="Add new category"
-            placeholderTextColor="#9CA3AF"
-            value={newCategoryName}
-            onChangeText={setNewCategoryName}
-          />
-          <TouchableOpacity style={styles.addBtn} onPress={addCategory} disabled={catLoading}>
-            <Text style={styles.addBtnText}>{catLoading ? 'Saving...' : 'Add'}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      {view === 'dept' && (
-        <View style={styles.catForm}>
-          <TextInput
-            style={[styles.input, darkMode && styles.inputDark]}
-            placeholder="Add new department"
-            placeholderTextColor="#9CA3AF"
-            value={newDeptName}
-            onChangeText={setNewDeptName}
-          />
-          <TouchableOpacity style={styles.addBtn} onPress={addDepartment} disabled={deptLoading}>
-            <Text style={styles.addBtnText}>{deptLoading ? 'Saving...' : 'Add'}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      {(catLoading && view === 'cat') || (deptLoading && view === 'dept') ? (
-        <ActivityIndicator color="#1E88E5" style={{ marginVertical: 10 }} />
-      ) : null}
-      <FlatList
+      <FlatList 
         data={view === 'cat' ? categories : depts}
-        keyExtractor={(item, idx) => `${item.id || item}-${idx}`}
         renderItem={({ item }) => (
           <View style={[styles.listItem, darkMode && styles.cardDark]}>
-            <Text style={[styles.itemText, darkMode && {color: 'white'}]}>{item.name || item}</Text>
-            {view === 'cat' ? (
-              <TouchableOpacity onPress={() => deleteCategory(item.id)}>
-                <Trash2 size={18} color="#EF4444" />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={() => deleteDepartment(item.id)}>
-                <Trash2 size={18} color="#EF4444" />
-              </TouchableOpacity>
-            )}
+            <Text style={[styles.itemText, darkMode && {color: 'white'}]}>{item}</Text>
+            <TouchableOpacity><Trash2 size={18} color="#EF4444" /></TouchableOpacity>
           </View>
         )}
       />
@@ -276,11 +100,6 @@ const styles = StyleSheet.create({
   menuSub: { fontSize: 11, color: '#9CA3AF' },
   listItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: 15, borderRadius: 15, marginBottom: 10 },
   itemText: { fontWeight: 'bold' },
-  catForm: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 },
-  input: { flex: 1, backgroundColor: 'white', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
-  inputDark: { backgroundColor: '#1F2937', borderColor: '#374151', color: 'white' },
-  addBtn: { backgroundColor: '#1E88E5', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10 },
-  addBtnText: { color: 'white', fontWeight: 'bold' },
   cardDark: { backgroundColor: '#1F2937' },
   sectionLabel: { fontSize: 11, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 15 },
   offenderCard: { backgroundColor: 'white', padding: 15, borderRadius: 15, marginBottom: 10 },
