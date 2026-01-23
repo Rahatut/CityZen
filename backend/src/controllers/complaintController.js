@@ -1,4 +1,4 @@
-const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, sequelize } = require('../models');
+const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, Upvote, sequelize } = require('../models');
 const supabase = require('../config/supabase'); // Import Supabase client
 const axios = require('axios');
 
@@ -128,7 +128,7 @@ exports.getCategories = async (req, res) => {
 ========================= */
 exports.getAllComplaints = async (req, res) => {
   try {
-    const { status, categoryId, page = 1, limit = 10 } = req.query;
+    const { status, categoryId, page = 1, limit = 10, citizenUid } = req.query;
 
     const where = {};
     if (status) where.currentStatus = status;
@@ -136,17 +136,32 @@ exports.getAllComplaints = async (req, res) => {
 
     const offset = (page - 1) * limit;
 
+    const include = [
+      { model: Category, attributes: ['id', 'name'] },
+      {
+        model: ComplaintImages,
+        as: 'images',
+        attributes: ['id', 'imageURL'],
+      }
+    ];
+
+    if (citizenUid) {
+      include.push({
+        model: Upvote,
+        where: { citizenUid },
+        required: false,
+        attributes: ['citizenUid']
+      });
+    }
+
     const { count, rows } = await Complaint.findAndCountAll({
       where,
-      include: [
-        { model: Category, attributes: ['id', 'name'] },
-        {
-          model: ComplaintImages,
-          as: 'images',
-          attributes: ['id', 'imageURL'],
-        },
+      distinct: true,
+      include,
+      order: [
+        ['upvotes', 'DESC'],
+        ['createdAt', 'DESC']
       ],
-      order: [['createdAt', 'DESC']],
       limit: parseInt(limit),
       offset: parseInt(offset),
     });
@@ -155,9 +170,19 @@ exports.getAllComplaints = async (req, res) => {
     const bucketName = 'cityzen-media';
     const complaintsWithSignedImages = await Promise.all(
       rows.map(async (complaint) => {
-        if (complaint.images && complaint.images.length > 0) {
-          complaint.images = await Promise.all(
-            complaint.images.map(async (img) => {
+        const plainComplaint = complaint.get({ plain: true });
+
+        // Add hasUpvoted flag
+        if (citizenUid) {
+          plainComplaint.hasUpvoted = plainComplaint.Upvotes && plainComplaint.Upvotes.length > 0;
+          delete plainComplaint.Upvotes;
+        } else {
+          plainComplaint.hasUpvoted = false;
+        }
+
+        if (plainComplaint.images && plainComplaint.images.length > 0) {
+          plainComplaint.images = await Promise.all(
+            plainComplaint.images.map(async (img) => {
               try {
                 const url = img.imageURL;
                 const parsed = new URL(url);
@@ -182,7 +207,7 @@ exports.getAllComplaints = async (req, res) => {
             })
           );
         }
-        return complaint;
+        return plainComplaint;
       })
     );
 
@@ -254,27 +279,47 @@ exports.getComplaintsByCitizen = async (req, res) => {
 exports.getComplaintById = async (req, res) => {
   try {
     const { id } = req.params;
+    const { citizenUid } = req.query;
 
-    const complaint = await Complaint.findByPk(id, {
-      include: [
-        { model: Category, attributes: ['id', 'name', 'description'] },
-        {
-          model: ComplaintImages,
-          as: 'images',
-          attributes: ['id', 'imageURL'],
-        },
-      ],
-    });
+    const include = [
+      { model: Category, attributes: ['id', 'name', 'description'] },
+      {
+        model: ComplaintImages,
+        as: 'images',
+        attributes: ['id', 'imageURL'],
+      },
+    ];
+
+    if (citizenUid) {
+      include.push({
+        model: Upvote,
+        where: { citizenUid },
+        required: false,
+        attributes: ['citizenUid']
+      });
+    }
+
+    const complaint = await Complaint.findByPk(id, { include });
 
     if (!complaint) {
       return res.status(404).json({ message: 'Complaint not found.' });
     }
 
+    const plainComplaint = complaint.get({ plain: true });
+
+    // Add hasUpvoted flag
+    if (citizenUid) {
+      plainComplaint.hasUpvoted = plainComplaint.Upvotes && plainComplaint.Upvotes.length > 0;
+      delete plainComplaint.Upvotes;
+    } else {
+      plainComplaint.hasUpvoted = false;
+    }
+
     // Sign image URLs to ensure accessibility
     const bucketName = 'cityzen-media';
-    if (complaint.images && complaint.images.length > 0) {
-      complaint.images = await Promise.all(
-        complaint.images.map(async (img) => {
+    if (plainComplaint.images && plainComplaint.images.length > 0) {
+      plainComplaint.images = await Promise.all(
+        plainComplaint.images.map(async (img) => {
           try {
             const url = img.imageURL;
             const parsed = new URL(url);
@@ -298,7 +343,7 @@ exports.getComplaintById = async (req, res) => {
       );
     }
 
-    res.json(complaint);
+    res.json(plainComplaint);
   } catch (error) {
     console.error('Get Complaint by ID Error:', error.message);
     res.status(500).json({
@@ -315,12 +360,17 @@ exports.updateComplaintStatus = async (req, res) => {
     const { id } = req.params;
     const { currentStatus, statusNotes } = req.body;
 
+    console.log(`[DEBUG] updateComplaintStatus called for ID: ${id}, Status: ${currentStatus}, Notes: ${statusNotes}`);
+
     const validStatuses = [
       'pending',
+      'accepted',
       'in_progress',
       'resolved',
       'closed',
       'rejected',
+      'appealed',
+      'completed'
     ];
 
     if (!validStatuses.includes(currentStatus)) {
@@ -448,6 +498,76 @@ exports.getRecommendedAuthorities = async (req, res) => {
     res.status(500).json({
       message: 'Error getting recommended authorities',
       error: error.message,
+    });
+  }
+};
+
+/* =========================
+   UPVOTE COMPLAINT
+========================= */
+exports.upvoteComplaint = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params; // Complaint ID
+    // Insecure integration: Get citizenUid from body (since we reverted auth)
+    const { citizenUid } = req.body;
+
+    if (!citizenUid) {
+      await t.rollback();
+      return res.status(400).json({ message: 'Missing citizenUid in request body.' });
+    }
+
+    // Check if complaint exists
+    const complaint = await Complaint.findByPk(id, { transaction: t });
+    if (!complaint) {
+      await t.rollback();
+      return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    // Check if upvote already exists
+    const existingUpvote = await Upvote.findOne({
+      where: {
+        citizenUid: citizenUid,
+        complaintId: id,
+      },
+      transaction: t,
+    });
+
+    if (existingUpvote) {
+      await t.rollback();
+      return res.status(400).json({ message: 'You have already upvoted this complaint.' });
+    }
+
+    // Create upvote
+    try {
+      await Upvote.create({
+        citizenUid: citizenUid,
+        complaintId: id,
+      }, { transaction: t });
+    } catch (createError) {
+      if (createError.name === 'SequelizeUniqueConstraintError') {
+        await t.rollback();
+        return res.status(400).json({ message: 'You have already upvoted this complaint.' });
+      }
+      throw createError;
+    }
+
+    // Increment complaint upvote count
+    await complaint.increment('upvotes', { transaction: t });
+    // Reload to get the new count
+    await complaint.reload({ transaction: t });
+
+    await t.commit();
+    res.json({
+      message: 'Upvote successful',
+      upvotes: complaint.upvotes,
+    });
+
+  } catch (error) {
+    await t.rollback();
+    console.error('Upvote Error:', error.message);
+    res.status(500).json({
+      message: 'Server error while upvoting.',
     });
   }
 };

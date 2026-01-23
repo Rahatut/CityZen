@@ -1,54 +1,124 @@
 import React, { useState } from 'react';
-import { 
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, 
-  FlatList, Image, TextInput, Alert, Modal, KeyboardAvoidingView, Platform 
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  FlatList, Image, TextInput, Alert, Modal, KeyboardAvoidingView, Platform
 } from 'react-native';
 import Navigation from '../components/Navigation';
-import { 
-  BarChart2, ClipboardList, User, MapPin, Clock, 
-  ThumbsUp, Camera, CheckCircle, XCircle, ArrowLeft, 
+import {
+  BarChart2, ClipboardList, User, MapPin, Clock,
+  ThumbsUp, Camera, CheckCircle, XCircle, ArrowLeft,
   ChevronRight, Search, LogOut, HardHat, TrendingUp, AlertCircle,
-  ShieldCheck, Award, Settings, Phone, Mail
+  ShieldCheck, Award, Settings, Phone, Mail, RefreshCw
 } from 'lucide-react-native';
+import api from '../services/api';
 
 export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDarkMode }) {
-  const [activeTab, setActiveTab] = useState('ledger'); 
-  const [workSubTab, setWorkSubTab] = useState('new'); 
+  const [activeTab, setActiveTab] = useState('ledger');
+  const [workSubTab, setWorkSubTab] = useState('new');
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [actionModalVisible, setActionModalVisible] = useState(false);
-  const [actionType, setActionType] = useState(''); 
+  const [actionType, setActionType] = useState('');
   const [note, setNote] = useState('');
   const [hasPhoto, setHasPhoto] = useState(false);
 
   const rejectionShortcuts = ["Inaccurate Location", "Duplicate Report", "Private Property", "Outside Jurisdiction"];
 
-  const [complaints, setComplaints] = useState([
-    { id: '101', title: 'Major Water Leak', location: 'Dhanmondi 27', ward: 'Ward 15', status: 'Pending', time: '45m ago', upvotes: 156, category: 'Water', description: 'Main pipe burst near the pharmacy. Significant water wastage.', citizenProof: 'https://images.unsplash.com/photo-1542013936693-884638332954?auto=format&fit=crop&w=500' },
-    { id: '102', title: 'Faulty Transformer', location: 'Banani Road 11', ward: 'Ward 19', status: 'Accepted', time: '3h ago', upvotes: 42, category: 'Electric', description: 'Sparking near gate. Dangerous for pedestrians.', citizenProof: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?auto=format&fit=crop&w=500' },
-    { id: '103', title: 'Drainage Clog', location: 'Mirpur 10', ward: 'Ward 2', status: 'In Progress', time: '5h ago', upvotes: 89, category: 'Sewerage', description: 'Water stinking up the area. Health hazard.', citizenProof: 'https://images.unsplash.com/photo-1516663243141-8f5573427f7a?auto=format&fit=crop&w=500' },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [complaints, setComplaints] = useState([]);
+
+  // Fetch complaints
+  const fetchComplaints = async () => {
+    setLoading(true);
+    try {
+      // By default getting all, sorted by upvotes (backend default)
+      const response = await api.get('/complaints?limit=100');
+      if (response.data && response.data.complaints) {
+        const mapped = response.data.complaints.map(c => {
+          const statusMap = {
+            'pending': 'Pending',
+            'accepted': 'Accepted',
+            'in_progress': 'In Progress',
+            'resolved': 'Resolved',
+            'rejected': 'Rejected',
+            'completed': 'Completed'
+          };
+          return {
+            id: c.id,
+            title: c.title,
+            location: `Lat: ${c.latitude}, Long: ${c.longitude}`,
+            ward: 'Unknown Ward', // Placeholder
+            status: statusMap[c.currentStatus] || c.currentStatus.charAt(0).toUpperCase() + c.currentStatus.slice(1),
+            time: new Date(c.createdAt).toLocaleDateString(),
+            upvotes: c.upvotes || 0,
+            category: c.Category ? c.Category.name : 'Uncategorized',
+            description: c.description,
+            citizenProof: c.images && c.images.length > 0 ? c.images[0].imageURL : 'https://via.placeholder.com/400'
+          };
+        });
+        setComplaints(mapped);
+      }
+    } catch (error) {
+      console.error("Failed to fetch complaints", error);
+      Alert.alert("Error", "Could not load complaints.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchComplaints();
+  }, []);
 
   const kpis = [
     { label: 'New', value: complaints.filter(c => c.status === 'Pending').length, color: '#F59E0B', icon: AlertCircle },
     { label: 'Repairing', value: complaints.filter(c => c.status === 'Accepted' || c.status === 'In Progress').length, color: '#1E88E5', icon: TrendingUp },
-    { label: 'Fixed', value: '1,240', color: '#10B981', icon: CheckCircle },
+    { label: 'Fixed', value: complaints.filter(c => c.status === 'Resolved' || c.status === 'Closed').length, color: '#10B981', icon: CheckCircle },
   ];
 
   // --- CORE LOGIC ---
-  const handleFinalSubmit = (statusOverride) => {
+  const handleFinalSubmit = async (statusOverride, targetItem = selectedItem) => {
+    if (!targetItem) {
+      Alert.alert("Error", "No item selected");
+      return;
+    }
     if (actionType === 'Reject' && !note) return Alert.alert("Required", "Please provide a rejection reason.");
     if ((actionType === 'Resolve' || actionType === 'Progress') && !hasPhoto) return Alert.alert("Evidence Required", "Please capture a work-site photo.");
 
-    const statusMap = { 'Reject': 'Rejected', 'Progress': 'In Progress', 'Resolve': 'Resolved', 'Accept': 'Accepted' };
-    const newStatus = statusOverride || statusMap[actionType];
+    // Status Validations
+    const statusMapBackend = { 'Reject': 'rejected', 'Progress': 'in_progress', 'Resolve': 'resolved', 'Accept': 'accepted' };
+    const statusMapUI = { 'rejected': 'Rejected', 'in_progress': 'In Progress', 'resolved': 'Resolved', 'accepted': 'Accepted' };
 
-    setComplaints(prev => prev.map(c => c.id === selectedItem.id ? { ...c, status: newStatus } : c));
-    setActionModalVisible(false);
-    setNote('');
-    setHasPhoto(false);
-    if(activeTab === 'details') setActiveTab('work');
+    // Determine Backend Status
+    // If statusOverride is provided (e.g. 'Accepted'), convert to lowercase for backend, else use map
+    let newStatusBackend = statusOverride ? statusOverride.toLowerCase() : statusMapBackend[actionType];
+
+    // Safety check just in case override was "Accepted" -> "accepted"
+    if (newStatusBackend === 'accepted') newStatusBackend = 'accepted';
+
+    try {
+      console.log(`Sending PATCH for ID ${targetItem.id} with status: ${newStatusBackend}`);
+      await api.patch(`/complaints/${targetItem.id}/status`, {
+        currentStatus: newStatusBackend,
+        statusNotes: note || ''
+      });
+
+      const newStatusUI = statusMapUI[newStatusBackend] || 'Pending';
+
+      setComplaints(prev => prev.map(c => c.id === targetItem.id ? { ...c, status: newStatusUI } : c));
+      Alert.alert("Success", `Complaint updated to ${newStatusUI}`);
+
+      setActionModalVisible(false);
+      setNote('');
+      setHasPhoto(false);
+      if (activeTab === 'details') setActiveTab('work');
+
+    } catch (error) {
+      console.error("Update failed", error);
+      const errorMsg = error.response?.data?.message || error.message || "Failed to update status on server.";
+      Alert.alert("Update Failed", errorMsg);
+    }
   };
 
   const openActionModal = (item, type) => {
@@ -63,7 +133,7 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
       {item.status === 'Pending' ? (
         <>
           <TouchableOpacity style={[styles.btn, styles.rejectBtn]} onPress={() => openActionModal(item, 'Reject')}><XCircle size={14} color="white" /><Text style={styles.btnText}>Reject</Text></TouchableOpacity>
-          <TouchableOpacity style={[styles.btn, styles.acceptBtn]} onPress={() => { setSelectedItem(item); handleFinalSubmit('Accepted'); }}><CheckCircle size={14} color="white" /><Text style={styles.btnText}>Accept</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.btn, styles.acceptBtn]} onPress={() => { setSelectedItem(item); handleFinalSubmit('Accepted', item); }}><CheckCircle size={14} color="white" /><Text style={styles.btnText}>Accept</Text></TouchableOpacity>
         </>
       ) : (
         <>
@@ -77,13 +147,16 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
   // --- TAB RENDERERS ---
 
   const renderWorkQueue = () => {
-    const data = workSubTab === 'new' 
-      ? complaints.filter(c => c.status === 'Pending') 
+    const data = workSubTab === 'new'
+      ? complaints.filter(c => c.status === 'Pending')
       : complaints.filter(c => c.status === 'Accepted' || c.status === 'In Progress');
 
     return (
       <View style={styles.paddedContent}>
-        <Text style={[styles.screenTitle, darkMode && styles.textWhite]}>Operational Queue</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={[styles.screenTitle, darkMode && styles.textWhite]}>Operational Queue</Text>
+          <TouchableOpacity onPress={fetchComplaints}><RefreshCw size={20} color={darkMode ? "white" : "black"} /></TouchableOpacity>
+        </View>
         <View style={[styles.toggleBar, darkMode && styles.toggleBarDark]}>
           <TouchableOpacity style={[styles.toggleTab, workSubTab === 'new' && styles.toggleActive]} onPress={() => setWorkSubTab('new')}>
             <Text style={[styles.toggleText, workSubTab === 'new' && styles.toggleTextActive]}>New ({complaints.filter(c => c.status === 'Pending').length})</Text>
@@ -111,7 +184,7 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
   };
 
   const renderDetails = () => (
-    <ScrollView style={{flex: 1}} bounces={false}>
+    <ScrollView style={{ flex: 1 }} bounces={false}>
       <View style={styles.detailHeader}>
         <TouchableOpacity onPress={() => setActiveTab('work')} style={styles.backButton}><ArrowLeft size={24} color="white" /></TouchableOpacity>
         <Text style={styles.detailHeaderTitle}>Complaint #{selectedItem.id}</Text>
@@ -131,18 +204,18 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
-      
+
       <View style={{ flex: 1, paddingBottom: 85 }}>
         {activeTab === 'ledger' && (
           <View style={styles.paddedContent}>
             <Text style={[styles.screenTitle, darkMode && styles.textWhite]}>Public Records Ledger</Text>
             <View style={styles.kpiGrid}>{kpis.map((k, i) => (<View key={i} style={[styles.kpiCard, darkMode && styles.cardDark]}><k.icon size={16} color={k.color} /><Text style={[styles.kpiVal, darkMode && styles.textWhite]}>{k.value}</Text><Text style={styles.kpiLab}>{k.label}</Text></View>))}</View>
-            <View style={styles.searchBar}><Search size={18} color="#9CA3AF" /><TextInput placeholder="Search Location, Ward, or Title..." style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery}/></View>
+            <View style={styles.searchBar}><Search size={18} color="#9CA3AF" /><TextInput placeholder="Search Location, Ward, or Title..." style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} /></View>
             <FlatList data={complaints.filter(item => item.location.toLowerCase().includes(searchQuery.toLowerCase()) || item.ward.toLowerCase().includes(searchQuery.toLowerCase()) || item.title.toLowerCase().includes(searchQuery.toLowerCase()))} renderItem={({ item }) => (
               <TouchableOpacity style={[styles.ledgerRow, darkMode && styles.cardDark]} onPress={() => { setSelectedItem(item); setActiveTab('details'); }}>
                 <View style={{ flex: 1 }}><View style={styles.rowTop}><Text style={[styles.ledgerTitle, darkMode && styles.textWhite]}>{item.title}</Text><View style={[styles.statusBadge, { backgroundColor: item.status === 'Resolved' ? '#D1FAE5' : '#FEF3C7' }]}><Text style={[styles.statusBadgeText, { color: item.status === 'Resolved' ? '#065F46' : '#92400E' }]}>{item.status}</Text></View></View><View style={styles.rowBottom}><Text style={styles.ledgerLoc}>{item.location} • {item.ward}</Text><Text style={styles.ledgerId}>#{item.id}</Text></View></View>
               </TouchableOpacity>
-            )}/>
+            )} />
           </View>
         )}
         {activeTab === 'work' && renderWorkQueue()}
@@ -162,10 +235,10 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
           <View style={[styles.modalContent, darkMode && styles.cardDark]}>
             <Text style={[styles.modalTitle, darkMode && styles.textWhite]}>{actionType === 'Reject' ? 'Rejection Reason' : 'Work Proof Upload'}</Text>
             {actionType === 'Reject' && (<View style={styles.shortcutWrapper}>{rejectionShortcuts.map(s => (<TouchableOpacity key={s} style={styles.shortcutChip} onPress={() => setNote(s)}><Text style={styles.shortcutText}>{s}</Text></TouchableOpacity>))}</View>)}
-            {(actionType === 'Progress' || actionType === 'Resolve') && (<TouchableOpacity style={[styles.uploadBox, hasPhoto && {borderColor: '#10B981'}]} onPress={() => setHasPhoto(true)}><Camera size={30} color={hasPhoto ? "#10B981" : "#1E88E5"} /><Text style={{color: hasPhoto ? '#10B981' : '#1E88E5', fontWeight: 'bold', marginTop: 10}}>{hasPhoto ? 'Photo Attached' : 'Capture Site Photo'}</Text></TouchableOpacity>)}
+            {(actionType === 'Progress' || actionType === 'Resolve') && (<TouchableOpacity style={[styles.uploadBox, hasPhoto && { borderColor: '#10B981' }]} onPress={() => setHasPhoto(true)}><Camera size={30} color={hasPhoto ? "#10B981" : "#1E88E5"} /><Text style={{ color: hasPhoto ? '#10B981' : '#1E88E5', fontWeight: 'bold', marginTop: 10 }}>{hasPhoto ? 'Photo Attached' : 'Capture Site Photo'}</Text></TouchableOpacity>)}
             <TextInput style={[styles.modalInput, darkMode && styles.inputDark]} placeholder="Internal remarks..." multiline value={note} onChangeText={setNote} />
             <View style={styles.modalActionButtons}><TouchableOpacity style={styles.cancelBtn} onPress={() => setActionModalVisible(false)}><Text>Cancel</Text></TouchableOpacity>
-            <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: actionType === 'Reject' ? '#EF4444' : '#10B981' }]} onPress={() => handleFinalSubmit()}><Text style={{color: 'white', fontWeight: 'bold'}}>Submit {actionType}</Text></TouchableOpacity></View>
+              <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: actionType === 'Reject' ? '#EF4444' : '#10B981' }]} onPress={() => handleFinalSubmit()}><Text style={{ color: 'white', fontWeight: 'bold' }}>Submit {actionType}</Text></TouchableOpacity></View>
           </View>
         </KeyboardAvoidingView>
       </Modal>

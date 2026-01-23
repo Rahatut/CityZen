@@ -114,23 +114,23 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
 
     useEffect(() => {
         const fetchCategories = async () => {
-          try {
-            const response = await axios.get(`${API_URL}/api/complaints/categories`, {
-              timeout: 30000, // 30-second timeout
-              headers: {
-                'bypass-tunnel-reminder': 'true'
-              }
-            });
-            setCategories(response.data);
-          } catch (error) {
-            console.error('Error fetching categories:', error);
-            Alert.alert('Error', 'Failed to load categories.');
-          }
+            try {
+                const response = await axios.get(`${API_URL}/api/complaints/categories`, {
+                    timeout: 30000, // 30-second timeout
+                    headers: {
+                        'bypass-tunnel-reminder': 'true'
+                    }
+                });
+                setCategories(response.data);
+            } catch (error) {
+                console.error('Error fetching categories:', error);
+                Alert.alert('Error', 'Failed to load categories.');
+            }
         };
         fetchCategories();
-      }, []);
-    
-      useEffect(() => {
+    }, []);
+
+    useEffect(() => {
         if (!aiResult) return;
         if (aiResult.confidence < CONFIDENCE_THRESHOLD) return;
         if (categories.length === 0) return;
@@ -261,7 +261,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         });
 
         try {
-            const res = await fetch("http://192.168.0.199:8000/detect", {
+            const res = await fetch(`${process.env.EXPO_PUBLIC_AI_SERVICE_URL}/detect`, {
                 method: "POST",
                 body: formData,
             });
@@ -456,7 +456,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
                         </View>
                     )}
 
-<                   TouchableOpacity onPress={() => setPrivacyEnabled(!privacyEnabled)} style={styles.privacyRow}>
+                    <                   TouchableOpacity onPress={() => setPrivacyEnabled(!privacyEnabled)} style={styles.privacyRow}>
                         <View style={[styles.checkbox, privacyEnabled && styles.checkboxActive]}>{privacyEnabled && <CheckCircle size={14} color="white" />}</View>
                         <Text style={[styles.privacyText, darkMode && styles.textGray]}>Blur faces or license plates (Privacy)</Text>
                         <Shield size={16} color="#6B7280" style={{ marginLeft: 'auto' }} />

@@ -9,6 +9,7 @@ import { Mail, Lock, Building2, Eye, EyeOff, AlertCircle } from 'lucide-react-na
 import axios from 'axios';
 import { auth } from '../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -45,6 +46,7 @@ export default function LoginScreen({ navigation }) {
       });
 
       const userData = response.data; // This object contains the stored role, fullName, etc.
+      await AsyncStorage.setItem('userData', JSON.stringify(userData));
 
       // 3. Navigation based on Role fetched from the database
       // Check App.js for the exact screen names

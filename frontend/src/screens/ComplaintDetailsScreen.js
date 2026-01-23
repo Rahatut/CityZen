@@ -19,12 +19,42 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const steps = ['Submitted', 'Accepted', 'In Progress', 'Resolved'];
   const statusToStepIndex = {
     pending: 0,
+    accepted: 1,
     in_progress: 2,
     resolved: 3,
     closed: 3,
     rejected: 0,
+    appealed: 2,
+    completed: 3
   };
   const currentStep = statusToStepIndex[(complaint?.currentStatus || 'pending')] ?? 0;
+
+  const handleUpvote = async () => {
+    // This requires userData context or prop, but we only have onLogout.
+    // We'll need to fetch user data from storage here just like FeedScreen
+    try {
+      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
+      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
+
+      if (!userData || !userData.firebaseUid) {
+        Alert.alert('Error', 'Please login to upvote');
+        return;
+      }
+
+      const res = await axios.post(`${API_URL}/api/complaints/${id}/upvote`, { citizenUid: userData.firebaseUid });
+      if (res.data && res.data.upvotes !== undefined) {
+        setComplaint(prev => ({ ...prev, upvotes: res.data.upvotes, hasUpvoted: true }));
+        setUpvotes(res.data.upvotes); // Sync local state
+      }
+    } catch (e) {
+      if (e.response && e.response.status === 400) {
+        Alert.alert('Info', 'You have already upvoted this complaint.');
+      } else {
+        console.error('Upvote failed', e);
+        Alert.alert('Error', 'Failed to upvote.');
+      }
+    }
+  };
 
   useEffect(() => {
     const fetchComplaint = async () => {
@@ -35,11 +65,14 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
       }
       try {
         setError(null);
+        // We need to pass citizenUid to get correct upvote status if backend supports it (next step)
+        // For now, just basic fetch
         const response = await axios.get(`${API_URL}/api/complaints/${id}`, {
           headers: { 'bypass-tunnel-reminder': 'true' },
           timeout: 10000,
         });
         setComplaint(response.data);
+        setUpvotes(response.data.upvotes || 0); // Initialize upvotes
       } catch (err) {
         console.error('Error fetching complaint:', err);
         let message = 'Failed to load complaint details';
@@ -83,13 +116,13 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
           <View style={[styles.card, darkMode && styles.cardDark]}>
             <Text style={[styles.title, darkMode && styles.textWhite]}>{complaint?.title || 'Untitled Complaint'}</Text>
             <View style={[styles.badge, { backgroundColor: (complaint?.currentStatus === 'pending' ? '#FEE2E2' : '#FFEDD5'), alignSelf: 'flex-start', marginBottom: 16 }]}>
-               <Text style={{ color: (complaint?.currentStatus === 'pending' ? '#B91C1C' : '#C2410C'), fontWeight: 'bold' }}>
-                 {(complaint?.currentStatus || 'pending').replace('_',' ').replace(/^./, s => s.toUpperCase())}
-               </Text>
+              <Text style={{ color: (complaint?.currentStatus === 'pending' ? '#B91C1C' : '#C2410C'), fontWeight: 'bold' }}>
+                {(complaint?.currentStatus || 'pending').replace('_', ' ').replace(/^./, s => s.toUpperCase())}
+              </Text>
             </View>
             <Text style={[styles.description, darkMode && styles.textGray]}>{complaint?.description || 'No description provided.'}</Text>
-            <TouchableOpacity onPress={() => setUpvotes(p => p + 1)} style={[styles.upvoteBtn, darkMode && styles.upvoteBtnDark]}>
-              <Heart size={20} color={darkMode ? 'white' : 'black'} />
+            <TouchableOpacity onPress={handleUpvote} style={[styles.upvoteBtn, darkMode && styles.upvoteBtnDark]}>
+              <Heart size={20} color={complaint?.hasUpvoted ? "#EF4444" : (darkMode ? 'white' : 'black')} fill={complaint?.hasUpvoted ? "#EF4444" : "none"} />
               <Text style={[styles.upvoteText, darkMode && styles.textWhite]}>Upvote ({upvotes})</Text>
             </TouchableOpacity>
           </View>

@@ -24,6 +24,9 @@ router.get('/complaints/citizen/:citizenUid', complaintController.getComplaintsB
 // Update complaint status
 router.patch('/complaints/:id/status', complaintController.updateComplaintStatus);
 
+// Upvote complaint
+router.post('/complaints/:id/upvote', complaintController.upvoteComplaint);
+
 // Delete complaint
 router.delete('/complaints/:id', complaintController.deleteComplaint);
 
