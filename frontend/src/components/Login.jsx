@@ -5,12 +5,12 @@ import { Mail, Lock, LogIn, Building2 } from 'lucide-react-native';
 export default function Login({ onLogin, navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  
+
   // Mobile login logic
   const handleLogin = () => {
     // In a real app, you would validate here
     onLogin('citizen'); // Mock login
-    navigation?.navigate('Home'); // Navigate to Home
+    navigation?.navigate('HomeScreen'); // Navigate to Home
   };
 
   return (

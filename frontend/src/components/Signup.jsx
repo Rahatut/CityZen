@@ -18,13 +18,13 @@ export default function Signup({ onSignup, navigation }) {
     }
     // Mock Signup
     onSignup('citizen');
-    navigation?.navigate('Home');
+    navigation?.navigate('HomeScreen');
   };
 
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-white dark:bg-gray-900">
       <View className="px-6 py-8">
-        
+
         {/* Header */}
         <View className="items-center mb-8">
           <Building2 size={48} color="#1E88E5" />
@@ -34,7 +34,7 @@ export default function Signup({ onSignup, navigation }) {
 
         {/* Form Fields */}
         <View className="space-y-4">
-          
+
           {/* Full Name */}
           <View className="mb-4">
             <Text className="text-gray-700 dark:text-gray-300 mb-2">Full Name</Text>
@@ -42,7 +42,7 @@ export default function Signup({ onSignup, navigation }) {
               <User size={20} color="#9CA3AF" />
               <TextInput
                 value={formData.fullName}
-                onChangeText={(text) => setFormData({...formData, fullName: text})}
+                onChangeText={(text) => setFormData({ ...formData, fullName: text })}
                 placeholder="John Doe"
                 placeholderTextColor="#9CA3AF"
                 className="flex-1 ml-3 text-gray-900 dark:text-white"
@@ -57,7 +57,7 @@ export default function Signup({ onSignup, navigation }) {
               <Mail size={20} color="#9CA3AF" />
               <TextInput
                 value={formData.email}
-                onChangeText={(text) => setFormData({...formData, email: text})}
+                onChangeText={(text) => setFormData({ ...formData, email: text })}
                 placeholder="name@example.com"
                 placeholderTextColor="#9CA3AF"
                 className="flex-1 ml-3 text-gray-900 dark:text-white"
@@ -73,7 +73,7 @@ export default function Signup({ onSignup, navigation }) {
               <MapPin size={20} color="#9CA3AF" />
               <TextInput
                 value={formData.ward}
-                onChangeText={(text) => setFormData({...formData, ward: text})}
+                onChangeText={(text) => setFormData({ ...formData, ward: text })}
                 placeholder="e.g. Ward 3"
                 placeholderTextColor="#9CA3AF"
                 className="flex-1 ml-3 text-gray-900 dark:text-white"
@@ -88,7 +88,7 @@ export default function Signup({ onSignup, navigation }) {
               <Lock size={20} color="#9CA3AF" />
               <TextInput
                 value={formData.password}
-                onChangeText={(text) => setFormData({...formData, password: text})}
+                onChangeText={(text) => setFormData({ ...formData, password: text })}
                 placeholder="Create password"
                 placeholderTextColor="#9CA3AF"
                 className="flex-1 ml-3 text-gray-900 dark:text-white"
@@ -103,7 +103,7 @@ export default function Signup({ onSignup, navigation }) {
               <Lock size={20} color="#9CA3AF" />
               <TextInput
                 value={formData.confirmPassword}
-                onChangeText={(text) => setFormData({...formData, confirmPassword: text})}
+                onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
                 placeholder="Confirm password"
                 placeholderTextColor="#9CA3AF"
                 className="flex-1 ml-3 text-gray-900 dark:text-white"

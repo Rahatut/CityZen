@@ -13,12 +13,17 @@ const ComplaintImages = sequelize.define('ComplaintImages', {
     allowNull: false,
   },
   imageURL: {
-    type: DataTypes.STRING, 
-    allowNull: false, 
+    type: DataTypes.STRING,
+    allowNull: false,
   },
   processedImageURL: {
-    type: DataTypes.STRING, 
-    allowNull: true, 
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  type: {
+    type: DataTypes.ENUM('initial', 'progress', 'resolution', 'appeal'),
+    defaultValue: 'initial',
+    allowNull: false
   }
 });
 
