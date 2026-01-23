@@ -7,7 +7,7 @@ const express = require('express');
 const morgan = require('morgan');
 const cors = require('cors');
 
-const { sequelize } = require('./models'); 
+const { sequelize } = require('./models');
 const logger = require('./utils/logger');
 const env = require('./config/env');
 const seedDatabase = require('./utils/seeder'); // Import the seeder logic
@@ -26,7 +26,7 @@ async function startServer() {
         logger.info("Database connection successful");
 
         // Sync models
-        await sequelize.sync({ alter: true }); 
+        await sequelize.sync({ alter: true });
         logger.info("Models synced");
 
         // Run the seeding logic
@@ -55,7 +55,7 @@ async function startServer() {
     });
 
     // API Routes
-    app.use('/api', authRoutes); 
+    app.use('/api', authRoutes);
     app.use('/api', complaintRoutes);
     app.use('/api/ai', aiRoutes);
 
