@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Image, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { View, Text, Image, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, Alert, Modal, TextInput as RNTextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
@@ -16,6 +16,27 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [userData, setUserData] = useState(null);
+
+  // Report modal state
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportComplaint, setReportComplaint] = useState(null); // { id, title }
+  const [reportReason, setReportReason] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+
+  const REPORT_REASONS = [
+    { key: 'harassment_threats', label: 'Harassment & Threats' },
+    { key: 'hate_speech_discrimination', label: 'Hate Speech & Discrimination' },
+    { key: 'nudity_sexual_content', label: 'Nudity & Sexual Content' },
+    { key: 'spam_scams', label: 'Spam & Scams' },
+    { key: 'fake_information_misinformation', label: 'Fake Information / Misinformation' },
+    { key: 'self_harm_suicide', label: 'Self-Harm & Suicide' },
+    { key: 'violence_graphic_content', label: 'Violence & Graphic Content' },
+    { key: 'intellectual_property', label: 'Intellectual Property Violations' },
+    { key: 'impersonation_fake_accounts', label: 'Impersonation & Fake Accounts' },
+    { key: 'child_safety', label: 'Child Safety' },
+    { key: 'other_violations', label: 'Other Policy Violations' },
+  ];
 
   // Fetch complaints from API
   const fetchComplaints = useCallback(async () => {
@@ -87,6 +108,46 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
     setRefreshing(true);
     fetchComplaints();
   }, [fetchComplaints]);
+
+  const openReport = (complaint) => {
+    setReportComplaint({ id: complaint.id, title: complaint.title });
+    setReportReason('');
+    setReportDescription('');
+    setReportVisible(true);
+  };
+
+  const submitReport = async () => {
+    try {
+      if (reportSubmitting) return; // Prevent double submission
+      
+      if (!userData || !userData.firebaseUid) {
+        Alert.alert('Error', 'Please login to report');
+        return;
+      }
+      if (!reportComplaint?.id || !reportReason) {
+        Alert.alert('Error', 'Please select a reason');
+        return;
+      }
+      
+      setReportSubmitting(true);
+      await api.post(`/complaints/${reportComplaint.id}/report`, {
+        complaintId: reportComplaint.id,
+        reportedBy: userData.firebaseUid,
+        reason: reportReason,
+        description: reportDescription || undefined,
+      });
+      setReportVisible(false);
+      setReportReason('');
+      setReportDescription('');
+      Alert.alert('Thank you', 'Your report has been submitted.');
+    } catch (e) {
+      console.error('Report failed', e?.response?.data || e.message);
+      const errorMsg = e?.response?.data?.message || 'Failed to submit report';
+      Alert.alert('Error', errorMsg);
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
@@ -176,9 +237,9 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                 </Text>
               </View>
               <View style={styles.divider} />
-              <View style={styles.rowBetween}>
+              <View style={styles.actionsRow}>
                 <TouchableOpacity
-                  style={styles.row}
+                  style={styles.actionButton}
                   onPress={async () => {
                     try {
                       if (!userData || !userData.firebaseUid) {
@@ -201,19 +262,73 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                   }}
                 >
                   <Heart size={16} color={item.upvotes > 0 ? "#EF4444" : "#6B7280"} fill={item.hasUpvoted ? "#EF4444" : "none"} />
-                  <Text style={[styles.cardMeta, { marginLeft: 4, color: item.upvotes > 0 ? "#EF4444" : "#6B7280" }]}>
+                  <Text style={[styles.actionText, { marginLeft: 4, color: item.upvotes > 0 ? "#EF4444" : "#6B7280" }]}>
                     {item.upvotes || 0} upvotes
                   </Text>
                 </TouchableOpacity>
-                <Text style={styles.cardMeta}>
-                  {new Date(item.createdAt).toLocaleDateString()}
-                </Text>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => openReport(item)}
+                >
+                  <AlertCircle size={16} color="#6B7280" />
+                  <Text style={[styles.actionText, { marginLeft: 4, color: "#6B7280" }]}>Report</Text>
+                </TouchableOpacity>
               </View>
+              <Text style={styles.cardMeta}>
+                {new Date(item.createdAt).toLocaleDateString()}
+              </Text>
             </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
       <BottomNav navigation={navigation} darkMode={darkMode} />
+
+      {/* Report Modal */}
+      <Modal visible={reportVisible} animationType="slide" transparent onRequestClose={() => setReportVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, darkMode && styles.cardDark]}>
+            <Text style={[styles.modalTitle, darkMode && styles.textWhite]}>Report Complaint</Text>
+            {reportComplaint && (
+              <Text style={[styles.modalSubtitle, darkMode && styles.textWhite]} numberOfLines={2}>
+                {reportComplaint.title}
+              </Text>
+            )}
+            <View style={{ maxHeight: 240, marginVertical: 8 }}>
+              <ScrollView>
+                {REPORT_REASONS.map(r => (
+                  <TouchableOpacity
+                    key={r.key}
+                    style={[styles.reasonItem, reportReason === r.key && styles.reasonItemActive]}
+                    onPress={() => setReportReason(r.key)}
+                  >
+                    <Text style={[styles.reasonText, darkMode && styles.textWhite]}>{r.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            <RNTextInput
+              placeholder="Optional description (details)"
+              placeholderTextColor="#9CA3AF"
+              value={reportDescription}
+              onChangeText={setReportDescription}
+              style={[styles.textArea, darkMode && styles.textWhite]}
+              multiline
+            />
+            <View style={[styles.rowBetween, { marginTop: 12 }] }>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setReportVisible(false)}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.submitBtn, (!reportReason || reportSubmitting) && { opacity: 0.5 }]} 
+                onPress={submitReport} 
+                disabled={!reportReason || reportSubmitting}
+              >
+                <Text style={styles.submitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -243,5 +358,20 @@ const styles = StyleSheet.create({
   errorContainerDark: { backgroundColor: '#7F1D1D', borderColor: '#991B1B' },
   errorText: { color: '#DC2626', fontSize: 14, marginVertical: 8, textAlign: 'center' },
   retryButton: { backgroundColor: '#EF4444', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 6, marginTop: 8 },
-  retryButtonText: { color: 'white', fontWeight: 'bold', fontSize: 14 }
+  retryButtonText: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+  actionsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 12 },
+  actionButton: { flexDirection: 'row', alignItems: 'center' },
+  actionText: { fontSize: 14 },
+  modalBackdrop: { flex:1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  modalCard: { width: '100%', maxWidth: 520, backgroundColor: 'white', borderRadius: 12, padding: 16 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+  modalSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
+  reasonItem: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  reasonItemActive: { backgroundColor: '#E5E7EB' },
+  reasonText: { fontSize: 14, color: '#111827' },
+  textArea: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, padding: 10, minHeight: 70, textAlignVertical: 'top', marginTop: 8 },
+  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, borderWidth: 1, borderColor: '#D1D5DB' },
+  cancelText: { color: '#374151', fontWeight: '600' },
+  submitBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, backgroundColor: '#F59E0B' },
+  submitText: { color: 'white', fontWeight: '700' }
 });

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput } from 'react-native';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
-import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle } from 'lucide-react-native';
+import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle } from 'lucide-react-native';
 import axios from 'axios';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -15,6 +15,25 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const [error, setError] = useState(null);
   const [complaint, setComplaint] = useState(null);
   const [retryTick, setRetryTick] = useState(0);
+  // Report modal state
+  const [reportVisible, setReportVisible] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+
+  const REPORT_REASONS = [
+    { key: 'harassment_threats', label: 'Harassment & Threats' },
+    { key: 'hate_speech_discrimination', label: 'Hate Speech & Discrimination' },
+    { key: 'nudity_sexual_content', label: 'Nudity & Sexual Content' },
+    { key: 'spam_scams', label: 'Spam & Scams' },
+    { key: 'fake_information_misinformation', label: 'Fake Information / Misinformation' },
+    { key: 'self_harm_suicide', label: 'Self-Harm & Suicide' },
+    { key: 'violence_graphic_content', label: 'Violence & Graphic Content' },
+    { key: 'intellectual_property', label: 'Intellectual Property Violations' },
+    { key: 'impersonation_fake_accounts', label: 'Impersonation & Fake Accounts' },
+    { key: 'child_safety', label: 'Child Safety' },
+    { key: 'other_violations', label: 'Other Policy Violations' },
+  ];
 
   // Map backend status to timeline steps
   const steps = ['Submitted', 'Accepted', 'In Progress', 'Resolved'];
@@ -54,6 +73,47 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         console.error('Upvote failed', e);
         Alert.alert('Error', 'Failed to upvote.');
       }
+    }
+  };
+
+  const openReport = () => {
+    setReportReason('');
+    setReportDescription('');
+    setReportVisible(true);
+  };
+
+  const submitReport = async () => {
+    try {
+      if (reportSubmitting) return; // Prevent double submission
+      
+      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
+      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
+      if (!userData || !userData.firebaseUid) {
+        Alert.alert('Error', 'Please login to report');
+        return;
+      }
+      if (!reportReason) {
+        Alert.alert('Error', 'Please select a reason');
+        return;
+      }
+      
+      setReportSubmitting(true);
+      await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/report`, {
+        complaintId: complaintIdToFetch,
+        reportedBy: userData.firebaseUid,
+        reason: reportReason,
+        description: reportDescription || undefined,
+      });
+      setReportVisible(false);
+      setReportReason('');
+      setReportDescription('');
+      Alert.alert('Thank you', 'Your report has been submitted.');
+    } catch (e) {
+      console.error('Report failed', e?.response?.data || e.message);
+      const errorMsg = e?.response?.data?.message || 'Failed to submit report';
+      Alert.alert('Error', errorMsg);
+    } finally {
+      setReportSubmitting(false);
     }
   };
 
@@ -122,10 +182,18 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
               </Text>
             </View>
             <Text style={[styles.description, darkMode && styles.textGray]}>{complaint?.description || 'No description provided.'}</Text>
-            <TouchableOpacity onPress={handleUpvote} style={[styles.upvoteBtn, darkMode && styles.upvoteBtnDark]}>
-              <Heart size={20} color={complaint?.hasUpvoted ? "#EF4444" : (darkMode ? 'white' : 'black')} fill={complaint?.hasUpvoted ? "#EF4444" : "none"} />
-              <Text style={[styles.upvoteText, darkMode && styles.textWhite]}>Upvote ({upvotes})</Text>
-            </TouchableOpacity>
+            <View style={styles.actionsRow}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleUpvote}>
+                <Heart size={16} color={upvotes > 0 ? "#EF4444" : "#6B7280"} fill={complaint?.hasUpvoted ? "#EF4444" : "none"} />
+                <Text style={[styles.actionText, { marginLeft: 4, color: upvotes > 0 ? "#EF4444" : "#6B7280" }]}>
+                  {upvotes} upvotes
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton} onPress={openReport}>
+                <AlertCircle size={16} color="#6B7280" />
+                <Text style={[styles.actionText, { marginLeft: 4, color: "#6B7280" }]}>Report</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Remarks & Evidence */}
@@ -162,6 +230,50 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
           </View>
         </View>
       </ScrollView>
+      {/* Report Modal */}
+      <Modal visible={reportVisible} animationType="slide" transparent onRequestClose={() => setReportVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, darkMode && styles.cardDark]}>
+            <Text style={[styles.modalTitle, darkMode && styles.textWhite]}>Report Complaint</Text>
+            <Text style={[styles.modalSubtitle, darkMode && styles.textWhite]} numberOfLines={2}>
+              {complaint?.title}
+            </Text>
+            <View style={{ maxHeight: 240, marginVertical: 8 }}>
+              <ScrollView>
+                {REPORT_REASONS.map(r => (
+                  <TouchableOpacity
+                    key={r.key}
+                    style={[styles.reasonItem, reportReason === r.key && styles.reasonItemActive]}
+                    onPress={() => setReportReason(r.key)}
+                  >
+                    <Text style={[styles.reasonText, darkMode && styles.textWhite]}>{r.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            <RNTextInput
+              placeholder="Optional description (details)"
+              placeholderTextColor="#9CA3AF"
+              value={reportDescription}
+              onChangeText={setReportDescription}
+              style={[styles.textArea, darkMode && styles.textWhite]}
+              multiline
+            />
+            <View style={[styles.rowBetween, { marginTop: 12 }] }>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setReportVisible(false)}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.submitBtn, (!reportReason || reportSubmitting) && { opacity: 0.5 }]} 
+                onPress={submitReport} 
+                disabled={!reportReason || reportSubmitting}
+              >
+                <Text style={styles.submitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <BottomNav navigation={navigation} darkMode={darkMode} />
     </View>
   );
@@ -182,7 +294,22 @@ const styles = StyleSheet.create({
   sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   description: { color: '#4B5563', lineHeight: 22, marginBottom: 20 },
-  upvoteBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB', gap: 8 },
+  actionsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 12 },
+  actionButton: { flexDirection: 'row', alignItems: 'center' },
+  actionText: { fontSize: 14 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
+  modalBackdrop: { flex:1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  modalCard: { width: '100%', maxWidth: 520, backgroundColor: 'white', borderRadius: 12, padding: 16 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+  modalSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
+  reasonItem: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  reasonItemActive: { backgroundColor: '#E5E7EB' },
+  reasonText: { fontSize: 14, color: '#111827' },
+  textArea: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, padding: 10, minHeight: 70, textAlignVertical: 'top', marginTop: 8 },
+  cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, borderWidth: 1, borderColor: '#D1D5DB' },
+  cancelText: { color: '#374151', fontWeight: '600' },
+  submitBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, backgroundColor: '#F59E0B' },
+  submitText: { color: 'white', fontWeight: '700' },
   timeline: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   stepContainer: { alignItems: 'center', flex: 1 },
   stepText: { fontSize: 10, color: '#9CA3AF', marginTop: 4 },

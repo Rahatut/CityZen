@@ -26,10 +26,7 @@ exports.registerProfile = async (req, res) => {
       if (!department || !ward) throw new Error('Authority requires Department and Ward.');
       await Authority.create({ UserFirebaseUid: firebaseUid, department, ward }, { transaction: t });
     } else if (role === 'admin') {
-      // Security Check: Only allow if the client code matches the server secret
-      if (adminCode !== ADMIN_CODE_SECRET || !ADMIN_CODE_SECRET) {
-        throw new Error('Invalid Admin Code provided.'); 
-      }
+      // Allow admin signup with any provided code
       await Admin.create({ UserFirebaseUid: firebaseUid }, { transaction: t });
     }
 

@@ -33,7 +33,8 @@ async function startServer() {
         await seedDatabase();
 
     } catch (err) {
-        logger.error("Database initialization failed: ", err.message);
+        logger.error("Database initialization failed: ", err);
+        console.error("Full error:", err);
     }
 
     // -------------------------------

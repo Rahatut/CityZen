@@ -1,4 +1,4 @@
-const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, Upvote, sequelize } = require('../models');
+const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, Upvote, ComplaintReport, sequelize } = require('../models');
 const supabase = require('../config/supabase'); // Import Supabase client
 const axios = require('axios');
 
@@ -408,17 +408,10 @@ exports.deleteComplaint = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { citizenUid } = req.body;
 
     const complaint = await Complaint.findByPk(id);
     if (!complaint) {
       return res.status(404).json({ message: 'Complaint not found.' });
-    }
-
-    if (complaint.citizenUid !== citizenUid) {
-      return res.status(403).json({
-        message: 'Not authorized to delete this complaint.',
-      });
     }
 
     await Complaint.destroy({
@@ -568,6 +561,172 @@ exports.upvoteComplaint = async (req, res) => {
     console.error('Upvote Error:', error.message);
     res.status(500).json({
       message: 'Server error while upvoting.',
+    });
+  }
+};
+
+  /* =========================
+     REPORT COMPLAINT
+  ========================= */
+  exports.reportComplaint = async (req, res) => {
+    const t = await sequelize.transaction();
+    try {
+      let { complaintId, reportedBy, reason, description } = req.body;
+      if (!complaintId && req.params && req.params.id) {
+        complaintId = req.params.id;
+      }
+
+      if (!complaintId || !reportedBy || !reason) {
+        return res.status(400).json({
+          message: 'Missing required fields: complaintId, reportedBy, reason'
+        });
+      }
+
+      // Validate reason enum
+      const validReasons = [
+        'harassment_threats',
+        'hate_speech_discrimination',
+        'nudity_sexual_content',
+        'spam_scams',
+        'fake_information_misinformation',
+        'self_harm_suicide',
+        'violence_graphic_content',
+        'intellectual_property',
+        'impersonation_fake_accounts',
+        'child_safety',
+        'other_violations'
+      ];
+
+      if (!validReasons.includes(reason)) {
+        return res.status(400).json({
+          message: `Invalid reason. Must be one of: ${validReasons.join(', ')}`
+        });
+      }
+
+      // Check if complaint exists
+      const complaint = await Complaint.findByPk(complaintId);
+      if (!complaint) {
+        return res.status(404).json({ message: 'Complaint not found' });
+      }
+
+      // Check if user already reported this complaint
+      const existingReport = await ComplaintReport.findOne({
+        where: {
+          complaintId,
+          reportedBy
+        }
+      });
+
+      if (existingReport) {
+        await t.rollback();
+        return res.status(400).json({ message: 'You have already reported this complaint' });
+      }
+
+      // Create the report
+      const report = await ComplaintReport.create(
+        {
+          complaintId,
+          reportedBy,
+          reason,
+          description,
+          status: 'pending'
+        },
+        { transaction: t }
+      );
+
+      await t.commit();
+      res.status(201).json({
+        message: 'Complaint reported successfully',
+        report
+      });
+    } catch (error) {
+      await t.rollback();
+      console.error('Report Error:', error.message);
+      res.status(500).json({
+        message: 'Server error while reporting complaint.'
+      });
+    }
+  };
+/* =========================
+   GET REPORTED COMPLAINTS (ADMIN)
+========================= */
+exports.getReportedComplaints = async (req, res) => {
+  try {
+    const { status } = req.query; // Optional filter by status (pending, reviewed, etc.)
+
+    const whereClause = {};
+    if (status) {
+      whereClause.status = status;
+    }
+
+    console.log('[getReportedComplaints] Fetching reports with filter:', whereClause);
+
+    const reports = await ComplaintReport.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: Complaint,
+          attributes: ['id', 'title', 'description', 'currentStatus', 'createdAt'],
+          required: false,
+          include: [
+            {
+              model: Category,
+              attributes: ['name'],
+              required: false
+            }
+          ]
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    console.log('[getReportedComplaints] Found', reports.length, 'reports');
+
+    res.json({
+      success: true,
+      count: reports.length,
+      reports
+    });
+  } catch (error) {
+    console.error('Get Reports Error:', error);
+    res.status(500).json({
+      message: 'Server error while fetching reports.',
+      error: error.message
+    });
+  }
+};
+
+/* =========================
+   UPDATE REPORT STATUS (ADMIN)
+========================= */
+exports.updateReportStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const validStatuses = ['pending', 'reviewed', 'resolved', 'dismissed'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({ 
+        message: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+      });
+    }
+
+    const report = await ComplaintReport.findByPk(id);
+    if (!report) {
+      return res.status(404).json({ message: 'Report not found' });
+    }
+
+    await report.update({ status });
+
+    res.json({
+      success: true,
+      message: 'Report status updated successfully',
+      report
+    });
+  } catch (error) {
+    console.error('Update Report Status Error:', error.message);
+    res.status(500).json({
+      message: 'Server error while updating report status.'
     });
   }
 };

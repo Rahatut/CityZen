@@ -1,19 +1,94 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Clock, XCircle, Send, Trash2, AlertTriangle } from 'lucide-react-native';
+import axios from 'axios';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function AdminFlagsScreen({ darkMode, defaultTab }) {
   const [subTab, setSubTab] = useState(defaultTab || 'reported');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (defaultTab) setSubTab(defaultTab);
   }, [defaultTab]);
 
   // Data for Reported Posts
-  const [reports, setReports] = useState([
-    { id: 'r1', user: 'User 202', reason: 'Graphic Content', target: 'Post #990', time: '5m ago' },
-    { id: 'r2', user: 'User 551', reason: 'Hate Speech', target: 'Post #102', time: '40m ago' },
-  ]);
+  const [reports, setReports] = useState([]);
+
+  // Fetch reports from API
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching reports from:', `${API_URL}/api/complaints/reports`);
+      const response = await axios.get(`${API_URL}/api/complaints/reports?status=pending`, {
+        headers: { 'bypass-tunnel-reminder': 'true' },
+        timeout: 10000,
+      });
+      console.log('Reports response:', response.data);
+      if (response.data && response.data.reports) {
+        const formattedReports = response.data.reports.map(r => ({
+          id: r.id,
+          complaintId: r.complaintId,
+          user: `User ${r.reportedBy.slice(0, 6)}`,
+          reason: formatReason(r.reason),
+          target: `Complaint #${r.complaintId}`,
+          time: formatTime(r.createdAt),
+          description: r.description,
+          complaint: r.Complaint
+        }));
+        setReports(formattedReports);
+      }
+    } catch (error) {
+      console.error('Error fetching reports:', error.message);
+      console.error('Full error:', error);
+      if (error.response) {
+        console.error('Response data:', error.response.data);
+        Alert.alert('Error', `Failed to load reports: ${error.response.data?.message || 'Server error'}`);
+      } else if (error.request) {
+        console.error('No response received');
+        Alert.alert('Error', 'Backend server is not responding. Make sure it\'s running.');
+      } else {
+        Alert.alert('Error', 'Failed to load reports');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatReason = (reason) => {
+    const reasonMap = {
+      'harassment_threats': 'Harassment & Threats',
+      'hate_speech_discrimination': 'Hate Speech',
+      'nudity_sexual_content': 'Nudity/Sexual Content',
+      'spam_scams': 'Spam/Scams',
+      'fake_information_misinformation': 'Misinformation',
+      'self_harm_suicide': 'Self-Harm',
+      'violence_graphic_content': 'Graphic Content',
+      'intellectual_property': 'IP Violation',
+      'impersonation_fake_accounts': 'Impersonation',
+      'child_safety': 'Child Safety',
+      'other_violations': 'Other Violation'
+    };
+    return reasonMap[reason] || reason;
+  };
+
+  const formatTime = (timestamp) => {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now - then;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
+  };
 
   // Data for Appeals (Formerly Fake Resolves)
   const [appeals, setAppeals] = useState([
@@ -52,19 +127,31 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
   };
 
   // --- LOGIC FOR REPORTS ---
-  const handleReportAction = (item, action) => {
+  const handleReportAction = async (item, action) => {
     if (action === 'delete') {
       Alert.alert(
         "Delete Post?",
-        `This will permanently remove the post. ${item.user} will receive 1 strike.`,
+        `This will permanently remove the complaint. ${item.user} will receive 1 strike.`,
         [
           { text: "Cancel" },
           { 
             text: "Delete & Strike", 
             style: "destructive", 
-            onPress: () => {
-              setReports(reports.filter(r => r.id !== item.id));
-              Alert.alert("Action Taken", `Post removed. ${item.user} strike count increased.`);
+            onPress: async () => {
+              try {
+                // Delete the complaint from backend
+                await axios.delete(`${API_URL}/api/complaints/${item.complaintId}`, {
+                  data: { citizenUid: 'admin' }, // Admin override
+                  headers: { 'bypass-tunnel-reminder': 'true' },
+                });
+                
+                // Remove from local state
+                setReports(reports.filter(r => r.id !== item.id));
+                Alert.alert("Action Taken", `Complaint deleted. ${item.user} strike count increased.`);
+              } catch (error) {
+                console.error('Delete error:', error);
+                Alert.alert('Error', 'Failed to delete complaint: ' + (error.response?.data?.message || error.message));
+              }
             }
           }
         ]
@@ -72,7 +159,24 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
     } else {
       Alert.alert("Reject Report", "No action will be taken. Dismiss this flag?", [
         { text: "Cancel" },
-        { text: "Dismiss", onPress: () => setReports(reports.filter(r => r.id !== item.id)) }
+        { 
+          text: "Dismiss", 
+          onPress: async () => {
+            try {
+              // Update report status to dismissed
+              await axios.patch(`${API_URL}/api/complaints/reports/${item.id}`, 
+                { status: 'dismissed' },
+                { headers: { 'bypass-tunnel-reminder': 'true' } }
+              );
+              
+              // Remove from local state
+              setReports(reports.filter(r => r.id !== item.id));
+            } catch (error) {
+              console.error('Dismiss error:', error);
+              Alert.alert('Error', 'Failed to dismiss report: ' + (error.response?.data?.message || error.message));
+            }
+          }
+        }
       ]);
     }
   };
@@ -87,7 +191,10 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         <AlertTriangle size={12} color="#EF4444" />
         <Text style={styles.reasonText}>{item.reason}</Text>
       </View>
-      <Text style={[styles.mainText, darkMode && {color: 'white'}]}>Target: {item.target}</Text>
+      <Text style={[styles.mainText, darkMode && {color: 'white'}]}>Complaint #{item.complaintId}: {item.complaint?.title || 'N/A'}</Text>
+      {item.description && (
+        <Text style={[styles.subNote, { marginTop: 4 }]}>Details: {item.description}</Text>
+      )}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.btnSec} onPress={() => handleReportAction(item, 'reject')}>
           <XCircle size={16} color="#6B7280" />
@@ -134,13 +241,20 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         </TouchableOpacity>
       </View>
 
-      <FlatList 
-        data={subTab === 'reported' ? reports : appeals}
-        renderItem={subTab === 'reported' ? renderReportItem : renderAppealItem}
-        keyExtractor={item => item.id}
-        ListEmptyComponent={<Text style={styles.emptyText}>No items in {subTab} queue.</Text>}
-        contentContainerStyle={{paddingBottom: 40}}
-      />
+      {loading ? (
+        <View style={{ padding: 40, alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#1E88E5" />
+          <Text style={[styles.subNote, { marginTop: 12 }]}>Loading reports...</Text>
+        </View>
+      ) : (
+        <FlatList 
+          data={subTab === 'reported' ? reports : appeals}
+          renderItem={subTab === 'reported' ? renderReportItem : renderAppealItem}
+          keyExtractor={item => item.id.toString()}
+          ListEmptyComponent={<Text style={styles.emptyText}>No items in {subTab} queue.</Text>}
+          contentContainerStyle={{paddingBottom: 40}}
+        />
+      )}
     </View>
   );
 }

@@ -18,6 +18,12 @@ router.get('/complaints', complaintController.getAllComplaints);
 // Get complaints by citizen ID (placed before generic :id route to avoid conflicts)
 router.get('/complaints/citizen/:citizenUid', complaintController.getComplaintsByCitizen);
 
+// Get reported complaints (Admin) - must be before :id route
+router.get('/complaints/reports', complaintController.getReportedComplaints);
+
+// Update report status (Admin)
+router.patch('/complaints/reports/:id', complaintController.updateReportStatus);
+
 // Get complaint by ID
 router.get('/complaints/:id', complaintController.getComplaintById);
 
@@ -26,6 +32,9 @@ router.patch('/complaints/:id/status', complaintController.updateComplaintStatus
 
 // Upvote complaint
 router.post('/complaints/:id/upvote', complaintController.upvoteComplaint);
+
+// Report complaint
+router.post('/complaints/:id/report', complaintController.reportComplaint);
 
 // Delete complaint
 router.delete('/complaints/:id', complaintController.deleteComplaint);
