@@ -5,12 +5,12 @@ import { Home, FileText, List, User } from 'lucide-react-native';
 export default function BottomNav({ navigation }) {
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.tab}>
+      <TouchableOpacity onPress={() => navigation.navigate('HomeScreen')} style={styles.tab}>
         <Home size={24} color="#6B7280" />
         <Text style={styles.label}>Home</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.navigate('SubmitComplaint')} style={styles.tab}>
+      <TouchableOpacity onPress={() => navigation.navigate('Camera')} style={styles.tab}>
         <FileText size={24} color="#6B7280" />
         <Text style={styles.label}>Submit</Text>
       </TouchableOpacity>
