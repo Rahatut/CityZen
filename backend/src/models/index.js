@@ -19,7 +19,7 @@ User.hasOne(Citizen, {
     name: 'UserFirebaseUid',
     allowNull: false
   },
-  onDelete: 'CASCADE' 
+  onDelete: 'CASCADE'
 });
 Citizen.belongsTo(User);
 
@@ -63,7 +63,7 @@ ComplaintImages.belongsTo(Complaint, {
 });
 
 // Many-to-many relationship between AuthorityCompany and Category
-AuthorityCompany.belongsToMany(Category, { 
+AuthorityCompany.belongsToMany(Category, {
   through: AuthorityCompanyCategory,
   foreignKey: 'authorityCompanyId',
   otherKey: 'categoryId'
@@ -86,24 +86,11 @@ AuthorityCompany.belongsToMany(Complaint, {
   otherKey: 'complaintId'
 });
 
-// Upvotes: Citizen (User) <-> Complaint
-Complaint.hasMany(Upvote, {
-  foreignKey: 'complaintId',
-  as: 'upvotes',
-  onDelete: 'CASCADE'
-});
-Upvote.belongsTo(Complaint, {
-  foreignKey: 'complaintId'
-});
-
-User.hasMany(Upvote, {
-  foreignKey: 'citizenUid',
-  sourceKey: 'firebaseUid'
-});
-Upvote.belongsTo(User, {
-  foreignKey: 'citizenUid',
-  targetKey: 'firebaseUid'
-});
+// Upvote Associations
+Complaint.hasMany(Upvote, { foreignKey: 'complaintId' });
+Upvote.belongsTo(Complaint, { foreignKey: 'complaintId' });
+Citizen.hasMany(Upvote, { foreignKey: 'citizenUid', sourceKey: 'UserFirebaseUid' });
+Upvote.belongsTo(Citizen, { foreignKey: 'citizenUid', targetKey: 'UserFirebaseUid' });
 
 
 module.exports = {

@@ -46,6 +46,7 @@ export default function LoginScreen({ navigation }) {
       });
 
       const userData = response.data; // This object contains the stored role, fullName, etc.
+      await AsyncStorage.setItem('userData', JSON.stringify(userData));
 
       // Store user data in AsyncStorage for later use (upvotes, profile, etc.)
       await AsyncStorage.setItem('userData', JSON.stringify(userData));

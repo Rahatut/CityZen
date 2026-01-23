@@ -1,13 +1,17 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { Bell, Moon, Sun, Building2, LogOut } from 'lucide-react-native';
+import { useNotification } from '../context/NotificationContext';
 
 export default function Navigation({ onLogout, darkMode, toggleDarkMode, navigation }) {
+  const { history } = useNotification();
+  const unreadCount = history ? history.filter(n => !n.read).length : 0;
+
   return (
     <View style={[styles.headerContainer, darkMode && styles.darkBg]}>
       <View style={styles.contentRow}>
         {/* Logo */}
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => navigation?.navigate('HomeScreen')}
           style={styles.logoContainer}
         >
@@ -17,9 +21,13 @@ export default function Navigation({ onLogout, darkMode, toggleDarkMode, navigat
 
         {/* Actions */}
         <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => navigation?.navigate('Notifications')}>
             <Bell size={24} color={darkMode ? '#D1D5DB' : '#374151'} />
-            <View style={styles.badge}><Text style={styles.badgeText}>3</Text></View>
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity onPress={toggleDarkMode} style={styles.iconButton}>
@@ -39,7 +47,7 @@ const styles = StyleSheet.create({
   headerContainer: {
     backgroundColor: '#fff',
     // FIXED: Uses safe area padding + extra space
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 50, 
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 50,
     paddingBottom: 16,
     paddingHorizontal: 16,
     borderBottomWidth: 1,

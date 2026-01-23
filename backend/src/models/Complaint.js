@@ -13,8 +13,8 @@ const Complaint = sequelize.define('Complaint', {
     allowNull: false,
   },
   categoryId: {
-    type: DataTypes.INTEGER, 
-    allowNull: false, 
+    type: DataTypes.INTEGER,
+    allowNull: false,
   },
   title: {
     type: DataTypes.STRING,
@@ -25,16 +25,24 @@ const Complaint = sequelize.define('Complaint', {
     allowNull: true,
   },
   latitude: {
-    type: DataTypes.DECIMAL(8,6),
+    type: DataTypes.DECIMAL(8, 6),
     allowNull: false,
   },
   longitude: {
-    type: DataTypes.DECIMAL(9,6),
+    type: DataTypes.DECIMAL(9, 6),
     allowNull: false,
   },
   currentStatus: {
-    type: DataTypes.ENUM('pending','accepted','resolved','appealed','completed'),
+    type: DataTypes.ENUM('pending', 'accepted', 'in_progress', 'resolved', 'appealed', 'completed', 'rejected'),
     allowNull: false
+  },
+  upvotes: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  statusNotes: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });
 

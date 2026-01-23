@@ -4,63 +4,76 @@ import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle } from 'lucide-react-native';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function ComplaintDetailsScreen({ route, navigation, onLogout, darkMode, toggleDarkMode }) {
-  const { id } = route.params || {};
+  const { id, complaintId } = route.params || {};
+  const complaintIdToFetch = id || complaintId;
   const [upvotes, setUpvotes] = useState(0);
-  const [userHasUpvoted, setUserHasUpvoted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [complaint, setComplaint] = useState(null);
   const [retryTick, setRetryTick] = useState(0);
-  const [userUid, setUserUid] = useState(null);
 
   // Map backend status to timeline steps
   const steps = ['Submitted', 'Accepted', 'In Progress', 'Resolved'];
   const statusToStepIndex = {
     pending: 0,
+    accepted: 1,
     in_progress: 2,
     resolved: 3,
     closed: 3,
     rejected: 0,
+    appealed: 2,
+    completed: 3
   };
   const currentStep = statusToStepIndex[(complaint?.currentStatus || 'pending')] ?? 0;
 
-  // Load user identity for upvote enforcement
-  useEffect(() => {
-    (async () => {
-      try {
-        const stored = await AsyncStorage.getItem('userData');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed?.firebaseUid) setUserUid(parsed.firebaseUid);
-        }
-      } catch (err) {
-        console.warn('Failed to load user from storage', err);
+  const handleUpvote = async () => {
+    // This requires userData context or prop, but we only have onLogout.
+    // We'll need to fetch user data from storage here just like FeedScreen
+    try {
+      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
+      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
+
+      if (!userData || !userData.firebaseUid) {
+        Alert.alert('Error', 'Please login to upvote');
+        return;
       }
-    })();
-  }, []);
+
+      const res = await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/upvote`, { citizenUid: userData.firebaseUid });
+      if (res.data && res.data.upvotes !== undefined) {
+        setComplaint(prev => ({ ...prev, upvotes: res.data.upvotes, hasUpvoted: true }));
+        setUpvotes(res.data.upvotes); // Sync local state
+      }
+    } catch (e) {
+      if (e.response && e.response.status === 400) {
+        Alert.alert('Info', 'You have already upvoted this complaint.');
+      } else {
+        console.error('Upvote failed', e);
+        Alert.alert('Error', 'Failed to upvote.');
+      }
+    }
+  };
 
   useEffect(() => {
     const fetchComplaint = async () => {
-      if (!id) {
+      if (!complaintIdToFetch) {
         setError('No complaint ID provided');
         setLoading(false);
         return;
       }
       try {
         setError(null);
-        const response = await axios.get(`${API_URL}/api/complaints/${id}`, {
-          params: userUid ? { citizenUid: userUid } : undefined,
+        // We need to pass citizenUid to get correct upvote status if backend supports it (next step)
+        // For now, just basic fetch
+        const response = await axios.get(`${API_URL}/api/complaints/${complaintIdToFetch}`, {
           headers: { 'bypass-tunnel-reminder': 'true' },
           timeout: 10000,
         });
         setComplaint(response.data);
-        setUpvotes(response.data?.upvoteCount || 0);
-        setUserHasUpvoted(response.data?.userHasUpvoted || false);
+        setUpvotes(response.data.upvotes || 0); // Initialize upvotes
       } catch (err) {
         console.error('Error fetching complaint:', err);
         let message = 'Failed to load complaint details';
@@ -73,25 +86,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
       }
     };
     fetchComplaint();
-  }, [id, retryTick, userUid]);
-
-  const toggleUpvote = async () => {
-    try {
-      if (!userUid) {
-        Alert.alert('Login required', 'Sign in to upvote complaints.');
-        return;
-      }
-      const response = await axios.post(`${API_URL}/api/complaints/${id}/upvote`, { citizenUid: userUid }, {
-        headers: { 'bypass-tunnel-reminder': 'true' },
-        timeout: 10000,
-      });
-      setUpvotes(response.data?.upvoteCount || 0);
-      setUserHasUpvoted(response.data?.upvoted || false);
-    } catch (err) {
-      console.error('Error toggling upvote:', err);
-      Alert.alert('Upvote failed', 'Could not update your upvote. Please try again.');
-    }
-  };
+  }, [complaintIdToFetch, retryTick]);
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
@@ -122,16 +117,36 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
           <View style={[styles.card, darkMode && styles.cardDark]}>
             <Text style={[styles.title, darkMode && styles.textWhite]}>{complaint?.title || 'Untitled Complaint'}</Text>
             <View style={[styles.badge, { backgroundColor: (complaint?.currentStatus === 'pending' ? '#FEE2E2' : '#FFEDD5'), alignSelf: 'flex-start', marginBottom: 16 }]}>
-               <Text style={{ color: (complaint?.currentStatus === 'pending' ? '#B91C1C' : '#C2410C'), fontWeight: 'bold' }}>
-                 {(complaint?.currentStatus || 'pending').replace('_',' ').replace(/^./, s => s.toUpperCase())}
-               </Text>
+              <Text style={{ color: (complaint?.currentStatus === 'pending' ? '#B91C1C' : '#C2410C'), fontWeight: 'bold' }}>
+                {(complaint?.currentStatus || 'pending').replace('_', ' ').replace(/^./, s => s.toUpperCase())}
+              </Text>
             </View>
             <Text style={[styles.description, darkMode && styles.textGray]}>{complaint?.description || 'No description provided.'}</Text>
-            <TouchableOpacity onPress={toggleUpvote} style={[styles.upvoteBtn, darkMode && styles.upvoteBtnDark, userHasUpvoted && styles.upvoteBtnActive]}>
-              <Heart size={20} color={userHasUpvoted ? '#EF4444' : (darkMode ? 'white' : 'black')} />
-              <Text style={[styles.upvoteText, darkMode && styles.textWhite]}>{userHasUpvoted ? 'Upvoted' : 'Upvote'} ({upvotes})</Text>
+            <TouchableOpacity onPress={handleUpvote} style={[styles.upvoteBtn, darkMode && styles.upvoteBtnDark]}>
+              <Heart size={20} color={complaint?.hasUpvoted ? "#EF4444" : (darkMode ? 'white' : 'black')} fill={complaint?.hasUpvoted ? "#EF4444" : "none"} />
+              <Text style={[styles.upvoteText, darkMode && styles.textWhite]}>Upvote ({upvotes})</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Remarks & Evidence */}
+          {(complaint?.statusNotes || (complaint?.images && complaint?.images.length > 1)) && (
+            <View style={[styles.card, darkMode && styles.cardDark]}>
+              <Text style={[styles.sectionHeader, darkMode && styles.textWhite]}>Authority Updates</Text>
+
+              {complaint?.statusNotes ? (
+                <View style={{ marginBottom: 16 }}>
+                  <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 4 }]}>INTERNAL REMARKS / REASON</Text>
+                  <View style={{ backgroundColor: darkMode ? '#374151' : '#F3F4F6', padding: 12, borderRadius: 8 }}>
+                    <Text style={{ color: darkMode ? 'white' : '#1F2937' }}>{complaint.statusNotes}</Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Placeholder for Authority Evidence - assuming if more than 1 image, others are evidence, or specific field needs to be added to backend later. 
+                      For now, just showing status notes is the primary request. 
+                  */}
+            </View>
+          )}
 
           {/* Timeline */}
           <View style={[styles.card, darkMode && styles.cardDark]}>
@@ -164,10 +179,10 @@ const styles = StyleSheet.create({
   card: { backgroundColor: 'white', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E5E7EB', elevation: 2 },
   cardDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
   title: { fontSize: 22, fontWeight: 'bold', color: '#1F2937', marginBottom: 8 },
+  sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   description: { color: '#4B5563', lineHeight: 22, marginBottom: 20 },
   upvoteBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB', gap: 8 },
-  upvoteBtnActive: { borderColor: '#EF4444' },
   timeline: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   stepContainer: { alignItems: 'center', flex: 1 },
   stepText: { fontSize: 10, color: '#9CA3AF', marginTop: 4 },

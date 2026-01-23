@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, Image, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { Search, MapPin, Heart, AlertCircle } from 'lucide-react-native';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../services/api';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -14,45 +15,37 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [userUid, setUserUid] = useState(null);
-
-  // Load cached user to enable per-user upvote state
-  useEffect(() => {
-    (async () => {
-      try {
-        const stored = await AsyncStorage.getItem('userData');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed?.firebaseUid) setUserUid(parsed.firebaseUid);
-        }
-      } catch (err) {
-        console.warn('Failed to load user from storage', err);
-      }
-    })();
-  }, []);
+  const [userData, setUserData] = useState(null);
 
   // Fetch complaints from API
   const fetchComplaints = useCallback(async () => {
     try {
       setError(null);
-      const params = { page: 1, limit: 50 };
-      if (userUid) params.citizenUid = userUid;
+      let url = `${API_URL}/api/complaints?page=1&limit=50`;
 
-      const response = await axios.get(`${API_URL}/api/complaints`, {
-        params,
+      // Get user ID for upvote persistence check
+      const jsonValue = await AsyncStorage.getItem('userData');
+      const retrievedUserData = jsonValue != null ? JSON.parse(jsonValue) : null;
+      setUserData(retrievedUserData);
+
+      if (retrievedUserData && retrievedUserData.firebaseUid) {
+        url += `&citizenUid=${retrievedUserData.firebaseUid}`;
+      }
+
+      const response = await axios.get(url, {
         headers: {
           'bypass-tunnel-reminder': 'true'
         },
         timeout: 10000 // 10 second timeout
       });
-      
+
       if (response.data && response.data.complaints) {
         setComplaints(response.data.complaints);
       }
     } catch (err) {
       console.error('Error fetching complaints:', err);
       let errorMessage = 'Failed to load complaints';
-      
+
       if (err.code === 'ECONNABORTED') {
         errorMessage = 'Network timeout. Please check your connection.';
       } else if (err.message === 'Network Error') {
@@ -60,14 +53,14 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       } else if (err.response?.status === 404) {
         errorMessage = 'Server not reachable. Is the backend running?';
       }
-      
+
       setError(errorMessage);
       setComplaints([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userUid]);
+  }, []);
 
   // Initial load
   useEffect(() => {
@@ -98,16 +91,16 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Text style={[styles.heading, darkMode && styles.textWhite]}>Complaints Feed</Text>
         <View style={[styles.searchBar, darkMode && styles.darkInput]}>
           <Search size={20} color="#9CA3AF" />
-          <TextInput 
-            style={[styles.input, darkMode && styles.textWhite]} 
-            placeholder="Search..." 
+          <TextInput
+            style={[styles.input, darkMode && styles.textWhite]}
+            placeholder="Search..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -127,7 +120,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
           <View style={[styles.errorContainer, darkMode && styles.errorContainerDark]}>
             <AlertCircle size={24} color="#EF4444" />
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.retryButton}
               onPress={() => {
                 setLoading(true);
@@ -150,17 +143,28 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
 
         {/* Complaints List */}
         {!loading && !error && filteredComplaints.map((item) => (
-          <TouchableOpacity 
-            key={item.id} 
-            style={[styles.card, darkMode && styles.cardDark]} 
+          <TouchableOpacity
+            key={item.id}
+            style={[styles.card, darkMode && styles.cardDark]}
             onPress={() => navigation.navigate('ComplaintDetails', { id: item.id })}
           >
             {item.images && item.images.length > 0 && (
               <Image source={{ uri: item.images[0].imageURL }} style={styles.cardImage} />
             )}
-            <View style={[styles.statusBadge, { backgroundColor: item.currentStatus === 'pending' ? '#FEE2E2' : '#FFEDD5' }]}>
-              <Text style={{ color: item.currentStatus === 'pending' ? '#B91C1C' : '#C2410C', fontSize: 10, fontWeight: 'bold' }}>
-                {item.currentStatus?.charAt(0).toUpperCase() + item.currentStatus?.slice(1) || 'Pending'}
+            <View style={[styles.statusBadge, {
+              backgroundColor:
+                item.currentStatus === 'resolved' || item.currentStatus === 'completed' ? '#D1FAE5' :
+                  item.currentStatus === 'rejected' ? '#FEE2E2' :
+                    item.currentStatus === 'in_progress' || item.currentStatus === 'accepted' ? '#FFEDD5' : '#E5E7EB'
+            }]}>
+              <Text style={{
+                color:
+                  item.currentStatus === 'resolved' || item.currentStatus === 'completed' ? '#065F46' :
+                    item.currentStatus === 'rejected' ? '#B91C1C' :
+                      item.currentStatus === 'in_progress' || item.currentStatus === 'accepted' ? '#C2410C' : '#374151',
+                fontSize: 10, fontWeight: 'bold'
+              }}>
+                {item.currentStatus ? (item.currentStatus.charAt(0).toUpperCase() + item.currentStatus.slice(1).replace('_', ' ')) : 'Pending'}
               </Text>
             </View>
             <View style={styles.cardContent}>
@@ -173,10 +177,34 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
               </View>
               <View style={styles.divider} />
               <View style={styles.rowBetween}>
-                <View style={styles.row}>
-                  <Heart size={14} color={item.userHasUpvoted ? '#EF4444' : '#6B7280'} />
-                  <Text style={styles.cardMeta}>{item.upvoteCount ?? 0} upvotes</Text>
-                </View>
+                <TouchableOpacity
+                  style={styles.row}
+                  onPress={async () => {
+                    try {
+                      if (!userData || !userData.firebaseUid) {
+                        Alert.alert('Error', 'Please login to upvote');
+                        return;
+                      }
+                      const res = await api.post(`/complaints/${item.id}/upvote`, { citizenUid: userData.firebaseUid });
+                      if (res.data && res.data.upvotes !== undefined) {
+                        setComplaints(prev => prev.map(c => c.id === item.id ? { ...c, upvotes: res.data.upvotes, hasUpvoted: true } : c));
+                      }
+                    } catch (e) {
+                      if (e.response && e.response.status === 400) {
+                        // Already upvoted or bad request
+                        console.log('Upvote prevented:', e.response.data.message);
+                        Alert.alert('Info', 'You have already upvoted this complaint.');
+                      } else {
+                        console.error('Upvote failed', e);
+                      }
+                    }
+                  }}
+                >
+                  <Heart size={16} color={item.upvotes > 0 ? "#EF4444" : "#6B7280"} fill={item.hasUpvoted ? "#EF4444" : "none"} />
+                  <Text style={[styles.cardMeta, { marginLeft: 4, color: item.upvotes > 0 ? "#EF4444" : "#6B7280" }]}>
+                    {item.upvotes || 0} upvotes
+                  </Text>
+                </TouchableOpacity>
                 <Text style={styles.cardMeta}>
                   {new Date(item.createdAt).toLocaleDateString()}
                 </Text>
