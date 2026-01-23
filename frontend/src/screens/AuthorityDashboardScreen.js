@@ -8,7 +8,7 @@ import {
   BarChart2, ClipboardList, User, MapPin, Clock,
   ThumbsUp, Camera, CheckCircle, XCircle, ArrowLeft,
   ChevronRight, Search, LogOut, HardHat, TrendingUp, AlertCircle,
-  ShieldCheck, Award, Settings, Phone, Mail, RefreshCw
+  ShieldCheck, Award, Settings, Phone, Mail, RefreshCw, Filter, X
 } from 'lucide-react-native';
 import api from '../services/api';
 
@@ -27,6 +27,15 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
 
   const [loading, setLoading] = useState(true);
   const [complaints, setComplaints] = useState([]);
+
+  // Filter states
+  const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [selectedStatuses, setSelectedStatuses] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [locationFilter, setLocationFilter] = useState('');
+  const [timeFilter, setTimeFilter] = useState('all'); // all, weekly, monthly, yearly
+  const [categories, setCategories] = useState([]);
+  const [activeFilterCount, setActiveFilterCount] = useState(0);
 
   // Fetch complaints
   const fetchComplaints = async () => {
@@ -51,6 +60,7 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
             ward: 'Unknown Ward', // Placeholder
             status: statusMap[c.currentStatus] || c.currentStatus.charAt(0).toUpperCase() + c.currentStatus.slice(1),
             time: new Date(c.createdAt).toLocaleDateString(),
+            createdAt: c.createdAt, // Keep raw date for filtering
             upvotes: c.upvotes || 0,
             category: c.Category ? c.Category.name : 'Uncategorized',
             description: c.description,
@@ -67,15 +77,49 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
     }
   };
 
+  // Fetch categories
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/complaints/categories');
+      setCategories(response.data || []);
+    } catch (error) {
+      console.error("Failed to fetch categories", error);
+    }
+  };
+
   React.useEffect(() => {
     fetchComplaints();
+    fetchCategories();
   }, []);
 
   const kpis = [
-    { label: 'New', value: complaints.filter(c => c.status === 'Pending').length, color: '#F59E0B', icon: AlertCircle },
-    { label: 'Repairing', value: complaints.filter(c => c.status === 'Accepted' || c.status === 'In Progress').length, color: '#1E88E5', icon: TrendingUp },
-    { label: 'Fixed', value: complaints.filter(c => c.status === 'Resolved' || c.status === 'Closed').length, color: '#10B981', icon: CheckCircle },
+    {
+      label: 'New',
+      value: complaints.filter(c => c.status === 'Pending').length,
+      color: '#F59E0B',
+      icon: AlertCircle,
+      statuses: ['Pending']
+    },
+    {
+      label: 'Repairing',
+      value: complaints.filter(c => c.status === 'Accepted' || c.status === 'In Progress').length,
+      color: '#1E88E5',
+      icon: TrendingUp,
+      statuses: ['Accepted', 'In Progress']
+    },
+    {
+      label: 'Fixed',
+      value: complaints.filter(c => c.status === 'Resolved' || c.status === 'Closed' || c.status === 'Completed').length,
+      color: '#10B981',
+      icon: CheckCircle,
+      statuses: ['Resolved', 'Closed', 'Completed']
+    },
   ];
+
+  const handleKpiPress = (statuses) => {
+    setSelectedStatuses(statuses);
+    setActiveFilterCount(prev => (statuses.length > 0 ? 1 : 0)); // Basic count adjustment
+  };
 
   // --- CORE LOGIC ---
   const handleFinalSubmit = async (statusOverride, targetItem = selectedItem) => {
@@ -201,23 +245,118 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
     </ScrollView>
   );
 
+  const renderLedger = () => {
+    const filteredData = complaints.filter(item => {
+      const matchesSearch = item.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.ward.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.title.toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status);
+      const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(item.category);
+      const matchesLocation = locationFilter.trim().length === 0 ||
+        item.location.toLowerCase().includes(locationFilter.toLowerCase()) ||
+        item.ward.toLowerCase().includes(locationFilter.toLowerCase());
+
+      let matchesTime = true;
+      if (timeFilter !== 'all') {
+        const createdDate = new Date(item.createdAt);
+        const now = new Date();
+        if (timeFilter === 'weekly') {
+          const weekAgo = new Date(now.setDate(now.getDate() - 7));
+          matchesTime = createdDate >= weekAgo;
+        } else if (timeFilter === 'monthly') {
+          const monthAgo = new Date(now.setMonth(now.getMonth() - 1));
+          matchesTime = createdDate >= monthAgo;
+        } else if (timeFilter === 'yearly') {
+          const yearAgo = new Date(now.setFullYear(now.getFullYear() - 1));
+          matchesTime = createdDate >= yearAgo;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesCategory && matchesLocation && matchesTime;
+    });
+
+    return (
+      <View style={styles.paddedContent}>
+        <Text style={[styles.screenTitle, darkMode && styles.textWhite]}>Public Records Ledger</Text>
+        <View style={styles.kpiGrid}>
+          {kpis.map((k, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.kpiCard, darkMode && styles.cardDark, (selectedStatuses.length > 0 && k.statuses.every(s => selectedStatuses.includes(s)) && k.statuses.length === selectedStatuses.length) && styles.kpiCardActive]}
+              onPress={() => handleKpiPress(k.statuses)}
+            >
+              <k.icon size={16} color={k.color} />
+              <Text style={[styles.kpiVal, darkMode && styles.textWhite]}>{k.value}</Text>
+              <Text style={styles.kpiLab}>{k.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.searchContainer}>
+          <View style={[styles.searchBar, { flex: 1, marginBottom: 0 }]}><Search size={18} color="#9CA3AF" /><TextInput placeholder="Search Location, Ward, or Title..." style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} /></View>
+          <TouchableOpacity
+            onPress={() => setFilterModalVisible(true)}
+            style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive]}
+          >
+            <Filter size={20} color={activeFilterCount > 0 ? "white" : "#6B7280"} />
+            {activeFilterCount > 0 && (
+              <View style={styles.filterBadge}>
+                <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+        <FlatList
+          data={filteredData}
+          renderItem={({ item }) => {
+            const getStatusColor = (status) => {
+              switch (status) {
+                case 'Pending': return { bg: '#FEF3C7', text: '#92400E', border: '#F59E0B' };
+                case 'Accepted': return { bg: '#DBEAFE', text: '#1E40AF', border: '#3B82F6' };
+                case 'In Progress': return { bg: '#F3E8FF', text: '#6B21A8', border: '#9333EA' };
+                case 'Resolved':
+                case 'Completed': return { bg: '#D1FAE5', text: '#065F46', border: '#10B981' };
+                case 'Rejected': return { bg: '#FEE2E2', text: '#991B1B', border: '#EF4444' };
+                default: return { bg: '#F3F4F6', text: '#374151', border: '#9CA3AF' };
+              }
+            };
+            const colors = getStatusColor(item.status);
+
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.ledgerRow,
+                  darkMode && styles.cardDark,
+                  { borderLeftWidth: 4, borderLeftColor: colors.border }
+                ]}
+                onPress={() => { setSelectedItem(item); setActiveTab('details'); }}
+              >
+                <View style={{ flex: 1 }}>
+                  <View style={styles.rowTop}>
+                    <Text style={[styles.ledgerTitle, darkMode && styles.textWhite]}>{item.title}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
+                      <Text style={[styles.statusBadgeText, { color: colors.text }]}>{item.status}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.rowBottom}>
+                    <Text style={styles.ledgerLoc}>{item.location} • {item.ward}</Text>
+                    <Text style={styles.ledgerId}>#{item.id}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
 
       <View style={{ flex: 1, paddingBottom: 85 }}>
-        {activeTab === 'ledger' && (
-          <View style={styles.paddedContent}>
-            <Text style={[styles.screenTitle, darkMode && styles.textWhite]}>Public Records Ledger</Text>
-            <View style={styles.kpiGrid}>{kpis.map((k, i) => (<View key={i} style={[styles.kpiCard, darkMode && styles.cardDark]}><k.icon size={16} color={k.color} /><Text style={[styles.kpiVal, darkMode && styles.textWhite]}>{k.value}</Text><Text style={styles.kpiLab}>{k.label}</Text></View>))}</View>
-            <View style={styles.searchBar}><Search size={18} color="#9CA3AF" /><TextInput placeholder="Search Location, Ward, or Title..." style={styles.searchInput} value={searchQuery} onChangeText={setSearchQuery} /></View>
-            <FlatList data={complaints.filter(item => item.location.toLowerCase().includes(searchQuery.toLowerCase()) || item.ward.toLowerCase().includes(searchQuery.toLowerCase()) || item.title.toLowerCase().includes(searchQuery.toLowerCase()))} renderItem={({ item }) => (
-              <TouchableOpacity style={[styles.ledgerRow, darkMode && styles.cardDark]} onPress={() => { setSelectedItem(item); setActiveTab('details'); }}>
-                <View style={{ flex: 1 }}><View style={styles.rowTop}><Text style={[styles.ledgerTitle, darkMode && styles.textWhite]}>{item.title}</Text><View style={[styles.statusBadge, { backgroundColor: item.status === 'Resolved' ? '#D1FAE5' : '#FEF3C7' }]}><Text style={[styles.statusBadgeText, { color: item.status === 'Resolved' ? '#065F46' : '#92400E' }]}>{item.status}</Text></View></View><View style={styles.rowBottom}><Text style={styles.ledgerLoc}>{item.location} • {item.ward}</Text><Text style={styles.ledgerId}>#{item.id}</Text></View></View>
-              </TouchableOpacity>
-            )} />
-          </View>
-        )}
+        {activeTab === 'ledger' && renderLedger()}
         {activeTab === 'work' && renderWorkQueue()}
         {activeTab === 'profile' && (
           <ScrollView style={styles.paddedContent}>
@@ -229,6 +368,112 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
         )}
         {activeTab === 'details' && renderDetails()}
       </View>
+
+      {/* Filter Modal */}
+
+      {/* Filter Modal */}
+      <Modal visible={filterModalVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, darkMode && styles.cardDark]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, darkMode && styles.textWhite]}>Filters</Text>
+              <TouchableOpacity onPress={() => setFilterModalVisible(false)}><X size={24} color={darkMode ? "white" : "black"} /></TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.filterSectionTitle}>Status</Text>
+              <View style={styles.filterOptionsGrid}>
+                {['Pending', 'Accepted', 'In Progress', 'Resolved', 'Rejected'].map((status) => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[styles.filterChip, selectedStatuses.includes(status) && styles.filterChipActive]}
+                    onPress={() => {
+                      setSelectedStatuses(prev =>
+                        prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+                      );
+                    }}
+                  >
+                    <Text style={[styles.filterChipText, selectedStatuses.includes(status) && styles.filterChipTextActive]}>{status}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.filterSectionTitle}>Category</Text>
+              <View style={styles.filterOptionsGrid}>
+                {categories.map((cat) => (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[styles.filterChip, selectedCategories.includes(cat.name) && styles.filterChipActive]}
+                    onPress={() => {
+                      setSelectedCategories(prev =>
+                        prev.includes(cat.name) ? prev.filter(c => c !== cat.name) : [...prev, cat.name]
+                      );
+                    }}
+                  >
+                    <Text style={[styles.filterChipText, selectedCategories.includes(cat.name) && styles.filterChipTextActive]}>{cat.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.filterSectionTitle}>Location / Ward</Text>
+              <TextInput
+                style={[styles.locationInput, darkMode && styles.inputDark]}
+                placeholder="Enter ward or locality..."
+                value={locationFilter}
+                onChangeText={setLocationFilter}
+              />
+
+              <Text style={styles.filterSectionTitle}>Time Period</Text>
+              <View style={styles.filterOptionsGrid}>
+                {[
+                  { label: 'All Time', value: 'all' },
+                  { label: 'Weekly', value: 'weekly' },
+                  { label: 'Monthly', value: 'monthly' },
+                  { label: 'Yearly', value: 'yearly' }
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.value}
+                    style={[styles.filterChip, timeFilter === item.value && styles.filterChipActive]}
+                    onPress={() => setTimeFilter(item.value)}
+                  >
+                    <Text style={[styles.filterChipText, timeFilter === item.value && styles.filterChipTextActive]}>{item.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActionButtons}>
+              <TouchableOpacity
+                style={styles.clearBtn}
+                onPress={() => {
+                  setSelectedStatuses([]);
+                  setSelectedCategories([]);
+                  setLocationFilter('');
+                  setTimeFilter('all');
+                  setActiveFilterCount(0);
+                  setFilterModalVisible(false);
+                }}
+              >
+                <Text style={styles.clearBtnText}>Clear All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.applyBtn}
+                onPress={() => {
+                  let count = 0;
+                  if (selectedStatuses.length > 0) count++;
+                  if (selectedCategories.length > 0) count++;
+                  if (locationFilter.trim().length > 0) count++;
+                  if (timeFilter !== 'all') count++;
+                  setActiveFilterCount(count);
+                  setFilterModalVisible(false);
+                }}
+              >
+                <Text style={styles.applyBtnText}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={actionModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
@@ -251,6 +496,7 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
@@ -346,5 +592,25 @@ const styles = StyleSheet.create({
   bottomNav: { position: 'absolute', bottom: 0, width: '100%', height: 85, backgroundColor: 'white', flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#EEE', paddingBottom: 25 },
   bottomNavDark: { backgroundColor: '#1F2937', borderTopColor: '#374151' },
   navItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  navLabel: { fontSize: 10, color: '#9CA3AF', marginTop: 4 }
+  navLabel: { fontSize: 10, color: '#9CA3AF', marginTop: 4 },
+
+  // New Filter Styles
+  searchContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 15 },
+  filterBtn: { width: 48, height: 48, backgroundColor: 'white', borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  filterBtnActive: { backgroundColor: '#1E88E5' },
+  kpiCardActive: { borderColor: '#1E88E5', borderWidth: 2, transform: [{ scale: 1.05 }] },
+  filterBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#EF4444', borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'white' },
+  filterBadgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  filterSectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#6B7280', textTransform: 'uppercase', marginTop: 15, marginBottom: 10 },
+  filterOptionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' },
+  filterChipActive: { backgroundColor: '#1E88E5', borderColor: '#1E88E5' },
+  filterChipText: { fontSize: 13, color: '#4B5563' },
+  filterChipTextActive: { color: 'white', fontWeight: 'bold' },
+  locationInput: { backgroundColor: '#F3F4F6', borderRadius: 10, padding: 12, fontSize: 14, marginTop: 5 },
+  clearBtn: { padding: 15 },
+  clearBtnText: { color: '#6B7280', fontWeight: 'bold' },
+  applyBtn: { backgroundColor: '#1E88E5', paddingHorizontal: 25, paddingVertical: 12, borderRadius: 10 },
+  applyBtnText: { color: 'white', fontWeight: 'bold' }
 });

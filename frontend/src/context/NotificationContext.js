@@ -14,52 +14,87 @@ export const NotificationProvider = ({ children }) => {
     const [notification, setNotification] = useState(null);
     const [lastStatuses, setLastStatuses] = useState({});
     const [history, setHistory] = useState([]); // Notification history
+    const [currentUid, setCurrentUid] = useState(null); // Track current user
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const navigation = useRef(null);
+    const lastStatusesRef = useRef({}); // Ref to avoid stale closure
 
     const setNavigation = (nav) => {
         navigation.current = nav;
     };
 
-    const loadHistory = async () => {
+    // Get user-specific storage key
+    const getStorageKey = (baseKey, uid) => {
+        return uid ? `${baseKey}_${uid}` : baseKey;
+    };
+
+    const loadHistory = async (uid) => {
         try {
-            const historyStr = await AsyncStorage.getItem('notificationHistory');
+            const key = getStorageKey('notificationHistory', uid);
+            const historyStr = await AsyncStorage.getItem(key);
             if (historyStr) setHistory(JSON.parse(historyStr));
+            else setHistory([]); // Clear if no history for this user
         } catch (e) {
             console.error("Failed to load notification history", e);
         }
     };
 
-    const loadLastStatuses = async () => {
+    const loadLastStatuses = async (uid) => {
         try {
-            const statusesStr = await AsyncStorage.getItem('lastComplaintStatuses');
+            const key = getStorageKey('lastComplaintStatuses', uid);
+            const statusesStr = await AsyncStorage.getItem(key);
             if (statusesStr) {
                 const loaded = JSON.parse(statusesStr);
                 console.log("NotificationContext: Loaded lastStatuses from storage:", loaded);
                 setLastStatuses(loaded);
+                lastStatusesRef.current = loaded; // Update ref
+            } else {
+                setLastStatuses({});
+                lastStatusesRef.current = {};
             }
         } catch (e) {
             console.error("Failed to load last statuses", e);
         }
     };
 
-    const saveLastStatuses = async (statuses) => {
+    const saveLastStatuses = async (statuses, uid) => {
         try {
-            await AsyncStorage.setItem('lastComplaintStatuses', JSON.stringify(statuses));
+            const key = getStorageKey('lastComplaintStatuses', uid);
+            await AsyncStorage.setItem(key, JSON.stringify(statuses));
         } catch (e) {
             console.error("Failed to save last statuses", e);
         }
     };
 
-    const addToHistory = async (newNotification) => {
+    const addToHistory = async (newNotification, uid) => {
         const updatedHistory = [newNotification, ...history].slice(0, 50); // Keep last 50
         setHistory(updatedHistory);
-        await AsyncStorage.setItem('notificationHistory', JSON.stringify(updatedHistory));
+        const key = getStorageKey('notificationHistory', uid);
+        await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
     };
 
+    // Load user data and initialize
     useEffect(() => {
-        loadHistory();
-        loadLastStatuses();
+        const initUser = async () => {
+            try {
+                const userDataStr = await AsyncStorage.getItem('userData');
+                if (userDataStr) {
+                    const userData = JSON.parse(userDataStr);
+                    let uid = userData.firebaseUid;
+                    if (!uid && userData.uid && typeof userData.uid === 'string') uid = userData.uid;
+                    if (!uid) uid = userData.id || userData.uid;
+
+                    if (uid) {
+                        setCurrentUid(uid);
+                        await loadHistory(uid);
+                        await loadLastStatuses(uid);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to initialize user", e);
+            }
+        };
+        initUser();
     }, []);
 
     const fetchComplaints = async () => {
@@ -88,7 +123,7 @@ export const NotificationProvider = ({ children }) => {
             const complaints = response.data.complaints || [];
             console.log("NotificationContext: Fetched", complaints.length, "complaints");
 
-            // Check for status changes
+            // Check for status changes using ref to avoid stale closure
             const newStatuses = {};
             let changedComplaint = null;
 
@@ -96,19 +131,18 @@ export const NotificationProvider = ({ children }) => {
                 newStatuses[c.id] = c.currentStatus;
 
                 // If we have a previous status and it's different
-                if (lastStatuses[c.id] && lastStatuses[c.id] !== c.currentStatus) {
-                    console.log(`NotificationContext: Status changed for complaint ${c.id}: ${lastStatuses[c.id]} -> ${c.currentStatus}`);
+                if (lastStatusesRef.current[c.id] && lastStatusesRef.current[c.id] !== c.currentStatus) {
+                    console.log(`NotificationContext: Status changed for complaint ${c.id}: ${lastStatusesRef.current[c.id]} -> ${c.currentStatus}`);
                     changedComplaint = c;
                 }
             });
 
             // Update stored statuses
-            setLastStatuses(prev => {
-                const updated = { ...prev, ...newStatuses };
-                console.log("NotificationContext: Updated lastStatuses:", updated);
-                saveLastStatuses(updated); // Persist to storage
-                return updated;
-            });
+            const updated = { ...lastStatusesRef.current, ...newStatuses };
+            console.log("NotificationContext: Updated lastStatuses:", updated);
+            setLastStatuses(updated);
+            lastStatusesRef.current = updated; // Update ref
+            saveLastStatuses(updated, uid); // Persist to storage with user-specific key
 
             // Trigger notification if changed
             if (changedComplaint) {
@@ -129,11 +163,12 @@ export const NotificationProvider = ({ children }) => {
                     message: `Complaint #${changedComplaint.id} is now ${readableStatus}`,
                     timestamp: new Date().toISOString(),
                     complaint: changedComplaint,
-                    read: false
+                    read: false,
+                    type: 'status_update'
                 };
 
                 showNotification(notifData);
-                addToHistory(notifData);
+                addToHistory(notifData, uid);
             } else {
                 console.log("NotificationContext: No status changes detected");
             }
@@ -145,17 +180,19 @@ export const NotificationProvider = ({ children }) => {
     };
 
     useEffect(() => {
-        console.log("NotificationContext: Starting polling");
+        if (!currentUid) return; // Don't start polling until user is loaded
+
+        console.log("NotificationContext: Starting polling for user:", currentUid);
         // Initial fetch
         fetchComplaints();
 
-        // Poll every 30 seconds
-        const interval = setInterval(fetchComplaints, 30000);
+        // Poll every 10 seconds (reduced from 30 for faster notifications)
+        const interval = setInterval(fetchComplaints, 10000);
         return () => {
             console.log("NotificationContext: Stopping polling");
             clearInterval(interval);
         };
-    }, []);
+    }, [currentUid]); // Re-run when user changes
 
     const showNotification = (notifData) => {
         setNotification(notifData);
@@ -191,13 +228,15 @@ export const NotificationProvider = ({ children }) => {
             n.uniqId === notifId ? { ...n, read: true } : n
         );
         setHistory(updatedHistory);
-        await AsyncStorage.setItem('notificationHistory', JSON.stringify(updatedHistory));
+        const key = getStorageKey('notificationHistory', currentUid);
+        await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
     };
 
     const markAllAsRead = async () => {
         const updatedHistory = history.map(n => ({ ...n, read: true }));
         setHistory(updatedHistory);
-        await AsyncStorage.setItem('notificationHistory', JSON.stringify(updatedHistory));
+        const key = getStorageKey('notificationHistory', currentUid);
+        await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
     };
 
     return (

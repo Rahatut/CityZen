@@ -1,10 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Switch } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { User, Edit, LogOut, Moon, Sun } from 'lucide-react-native';
 
 export default function ProfileScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
+  const [userData, setUserData] = useState({
+    fullName: 'Loading...',
+    email: 'Loading...'
+  });
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const userDataStr = await AsyncStorage.getItem('userData');
+      if (userDataStr) {
+        const data = JSON.parse(userDataStr);
+        setUserData({
+          fullName: data.fullName || data.name || data.username || 'User',
+          email: data.email || 'No email available'
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+    }
+  };
+
   const handleLogout = () => {
     if (onLogout) onLogout();
     navigation.replace('Login');
@@ -18,9 +43,9 @@ export default function ProfileScreen({ navigation, onLogout, darkMode, toggleDa
 
         <View style={[styles.card, darkMode && styles.cardDark]}>
           <View style={styles.avatarContainer}><User size={40} color="#1E88E5" /></View>
-          <Text style={[styles.name, darkMode && styles.textWhite]}>Alex Johnson</Text>
-          <Text style={styles.email}>alex@example.com</Text>
-          
+          <Text style={[styles.name, darkMode && styles.textWhite]}>{userData.fullName}</Text>
+          <Text style={styles.email}>{userData.email}</Text>
+
           <View style={styles.infoRow}>
             <Text style={styles.label}>Dark Mode</Text>
             <Switch value={darkMode} onValueChange={toggleDarkMode} trackColor={{ false: "#767577", true: "#1E88E5" }} />
@@ -33,8 +58,8 @@ export default function ProfileScreen({ navigation, onLogout, darkMode, toggleDa
         </View>
 
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-           <LogOut size={20} color="#DC2626" />
-           <Text style={{ color: '#DC2626', fontWeight: 'bold', marginLeft: 8 }}>Log Out</Text>
+          <LogOut size={20} color="#DC2626" />
+          <Text style={{ color: '#DC2626', fontWeight: 'bold', marginLeft: 8 }}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
       <BottomNav navigation={navigation} darkMode={darkMode} />
