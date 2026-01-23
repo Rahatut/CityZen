@@ -11,6 +11,7 @@ const { sequelize } = require('./models');
 const logger = require('./utils/logger');
 const env = require('./config/env');
 const seedDatabase = require('./utils/seeder'); // Import the seeder logic
+const fixOrphanedComplaints = require('./utils/fixOrphanedComplaints');
 
 const authRoutes = require('./routes/authRoutes');
 const complaintRoutes = require('./routes/complaintRoutes');
@@ -31,6 +32,12 @@ async function startServer() {
 
         // Run the seeding logic
         await seedDatabase();
+
+        // Fix orphaned complaints (if any)
+        const fixResult = await fixOrphanedComplaints();
+        if (fixResult.fixed > 0) {
+            logger.info(`Orphaned complaints fixed: ${fixResult.fixed}/${fixResult.total}`);
+        }
 
     } catch (err) {
         logger.error("Database initialization failed: ", err);

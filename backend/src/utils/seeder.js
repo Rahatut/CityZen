@@ -3,6 +3,17 @@ const logger = require('./logger');
 
 async function seedDatabase() {
     try {
+        // Only seed if tables are empty (first-time setup)
+        const categoryCount = await Category.count();
+        const companyCount = await AuthorityCompany.count();
+
+        if (categoryCount > 0 && companyCount > 0) {
+            logger.info("Database already seeded, skipping...");
+            return;
+        }
+
+        logger.info("Seeding database for first time...");
+
         // Seed categories into database
         const categoriesToSeed = [
             { name: 'Roads & Transport', description: 'Issues related to roads, traffic, and public transportation.' },
@@ -13,11 +24,13 @@ async function seedDatabase() {
             { name: 'Environment & Public Spaces', description: 'Issues related to parks, green spaces, pollution, and environmental quality.' }
         ];
 
+        const categoryMap = {};
         for (const categoryData of categoriesToSeed) {
-            await Category.findOrCreate({
+            const [category] = await Category.findOrCreate({
                 where: { name: categoryData.name },
                 defaults: categoryData
             });
+            categoryMap[categoryData.name] = category.id;
         }
         logger.info("Categories seeded");
 
@@ -31,41 +44,39 @@ async function seedDatabase() {
             { name: 'DWASA (Dhaka Water Supply & Sewerage Authority)', description: 'Responsible for water supply, sewerage, and drainage infrastructure in Dhaka, including water leaks, sewer overflow, and blocked drains.' }
         ];
 
+        const companyMap = {};
         for (const companyData of companiesToSeed) {
-            await AuthorityCompany.findOrCreate({
+            const [company] = await AuthorityCompany.findOrCreate({
                 where: { name: companyData.name },
                 defaults: companyData
             });
+            companyMap[companyData.name] = company.id;
         }
         logger.info("Companies seeded");
 
         const authorityCategoriesToSeed = [
-            { authorityCompanyId: 1, categoryId: 1 }, 
-            { authorityCompanyId: 1, categoryId: 2 }, 
-            { authorityCompanyId: 1, categoryId: 3 }, 
-            { authorityCompanyId: 1, categoryId: 4 }, 
-            { authorityCompanyId: 1, categoryId: 5 }, 
-            { authorityCompanyId: 1, categoryId: 6 }, 
-            { authorityCompanyId: 2, categoryId: 1 },
-            { authorityCompanyId: 2, categoryId: 2 },
-            { authorityCompanyId: 2, categoryId: 3 },
-            { authorityCompanyId: 2, categoryId: 4 },
-            { authorityCompanyId: 2, categoryId: 5 },
-            { authorityCompanyId: 2, categoryId: 6 }, 
-            { authorityCompanyId: 3, categoryId: 3 },         
-            { authorityCompanyId: 4, categoryId: 3 },         
-            { authorityCompanyId: 5, categoryId: 6 },         
-            { authorityCompanyId: 6, categoryId: 4 }
+            { companyName: 'DNCC (Dhaka North City Corporation)', categoryNames: ['Roads & Transport', 'Garbage & Waste Management', 'Streetlights & Electrical', 'Water Supply & Drains', 'Buildings & Infrastructure', 'Environment & Public Spaces'] }, 
+            { companyName: 'DSCC (Dhaka South City Corporation)', categoryNames: ['Roads & Transport', 'Garbage & Waste Management', 'Streetlights & Electrical', 'Water Supply & Drains', 'Buildings & Infrastructure', 'Environment & Public Spaces'] }, 
+            { companyName: 'DESCO (Dhaka Electric Supply Company)', categoryNames: ['Streetlights & Electrical'] },         
+            { companyName: 'DPDC (Dhaka Power Distribution Company)', categoryNames: ['Streetlights & Electrical'] },         
+            { companyName: 'DoE (Department of Environment)', categoryNames: ['Environment & Public Spaces'] },         
+            { companyName: 'DWASA (Dhaka Water Supply & Sewerage Authority)', categoryNames: ['Water Supply & Drains'] }
         ];         
 
-        for (const authorityCategoryData of authorityCategoriesToSeed) {
-            await AuthorityCompanyCategory.findOrCreate({
-                where: {
-                    authorityCompanyId: authorityCategoryData.authorityCompanyId,
-                    categoryId: authorityCategoryData.categoryId
-                },
-                defaults: authorityCategoryData
-            });
+        for (const mapping of authorityCategoriesToSeed) {
+            const authorityCompanyId = companyMap[mapping.companyName];
+            for (const categoryName of mapping.categoryNames) {
+                const categoryId = categoryMap[categoryName];
+                if (authorityCompanyId && categoryId) {
+                    await AuthorityCompanyCategory.findOrCreate({
+                        where: {
+                            authorityCompanyId,
+                            categoryId
+                        },
+                        defaults: { authorityCompanyId, categoryId }
+                    });
+                }
+            }
         }         
         logger.info("Authority Company Categories relations seeded");
     } catch (error) {

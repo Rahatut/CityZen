@@ -1,19 +1,102 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { ShieldCheck, LogOut, Key, History } from 'lucide-react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { ShieldCheck, LogOut, Key, History, Mail, Clock } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import api from '../services/api';
 
 export default function AdminProfileScreen({ darkMode, onLogout }) {
+  const [adminData, setAdminData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [lastLogin, setLastLogin] = useState(null);
+
+  useEffect(() => {
+    fetchAdminProfile();
+  }, []);
+
+  const fetchAdminProfile = async () => {
+    try {
+      setLoading(true);
+      // Get stored user data
+      const userDataStr = await AsyncStorage.getItem('userData');
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+
+      if (userData) {
+        setAdminData(userData);
+        
+        // Try to fetch additional admin stats from backend
+        try {
+          const response = await api.get(`/auth/profile/${userData.firebaseUid}`);
+          if (response.data) {
+            setAdminData(response.data);
+          }
+        } catch (err) {
+          console.log('Could not fetch extended profile:', err);
+        }
+
+        // Get last login time from AsyncStorage
+        const lastLoginTime = await AsyncStorage.getItem('lastLoginTime');
+        if (lastLoginTime) {
+          setLastLogin(new Date(lastLoginTime));
+        } else {
+          setLastLogin(new Date());
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching admin profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatLastLogin = (date) => {
+    if (!date) return 'Unknown';
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    const time = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return isToday ? `Today, ${time}` : date.toLocaleDateString() + ` ${time}`;
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#1E88E5" />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container}>
       <Text style={[styles.title, darkMode && {color: 'white'}]}>Admin Control</Text>
       <View style={styles.profileCard}>
         <View style={styles.avatar}><ShieldCheck size={40} color="white" /></View>
-        <Text style={styles.name}>Super Admin</Text>
+        <Text style={styles.name}>{adminData?.fullName || 'Super Admin'}</Text>
         <View style={styles.badge}><Text style={styles.badgeText}>ROOT ACCESS</Text></View>
       </View>
       <View style={[styles.infoCard, darkMode && styles.cardDark]}>
-        <InfoLine icon={Key} lab="Access" val="Encrypted AES-256" darkMode={darkMode} />
-        <InfoLine icon={History} lab="Last Login" val="Today, 09:42 AM" darkMode={darkMode} />
+        <InfoLine 
+          icon={Mail} 
+          lab="Email" 
+          val={adminData?.email || 'admin@cityzen.local'} 
+          darkMode={darkMode} 
+        />
+        <InfoLine 
+          icon={Key} 
+          lab="Role" 
+          val={adminData?.role?.toUpperCase() || 'ADMIN'} 
+          darkMode={darkMode} 
+        />
+        <InfoLine 
+          icon={Clock} 
+          lab="Member Since" 
+          val={adminData?.createdAt ? new Date(adminData.createdAt).toLocaleDateString() : 'Recently'} 
+          darkMode={darkMode} 
+        />
+        <InfoLine 
+          icon={History} 
+          lab="Last Login" 
+          val={formatLastLogin(lastLogin)} 
+          darkMode={darkMode} 
+        />
       </View>
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <LogOut size={20} color="white" /><Text style={styles.logoutText}>Terminate Session</Text>
@@ -25,7 +108,10 @@ export default function AdminProfileScreen({ darkMode, onLogout }) {
 const InfoLine = ({ icon: Icon, lab, val, darkMode }) => (
   <View style={styles.infoLine}>
     <Icon size={16} color="#9CA3AF" />
-    <View style={{marginLeft: 12}}><Text style={styles.infoLab}>{lab}</Text><Text style={[styles.infoVal, darkMode && {color: 'white'}]}>{val}</Text></View>
+    <View style={{marginLeft: 12, flex: 1}}>
+      <Text style={styles.infoLab}>{lab}</Text>
+      <Text style={[styles.infoVal, darkMode && {color: 'white'}, styles.ellipsisText]} numberOfLines={1}>{val}</Text>
+    </View>
   </View>
 );
 
@@ -42,6 +128,7 @@ const styles = StyleSheet.create({
   infoLine: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   infoLab: { fontSize: 10, color: '#9CA3AF' },
   infoVal: { fontSize: 14, fontWeight: '600' },
-  logoutBtn: { backgroundColor: '#EF4444', flexDirection: 'row', padding: 18, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 30 },
+  ellipsisText: { maxWidth: '90%' },
+  logoutBtn: { backgroundColor: '#EF4444', flexDirection: 'row', padding: 18, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 30, marginBottom: 30 },
   logoutText: { color: 'white', fontWeight: 'bold', marginLeft: 10 }
 });
