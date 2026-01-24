@@ -10,7 +10,19 @@ router.post('/complaints', upload.array('images'), complaintController.createCom
 
 // Get all categories
 router.get('/complaints/categories', complaintController.getCategories);
+router.post('/complaints/categories', complaintController.createCategory);
+router.delete('/complaints/categories/:id', complaintController.deleteCategory);
 router.get('/complaints/recommend-authorities', complaintController.getRecommendedAuthorities);
+
+// Departments (Authority companies)
+router.get('/departments', complaintController.getDepartments);
+router.post('/departments', complaintController.createDepartment);
+router.delete('/departments/:id', complaintController.deleteDepartment);
+
+// Admin KPIs
+router.get('/admin/kpis', complaintController.getAdminKpis);
+router.get('/admin/kpis/details', complaintController.getAdminKpiDetails);
+router.get('/admin/moderation', complaintController.getModerationOverview);
 
 // Get all complaints (with filtering and pagination)
 router.get('/complaints', complaintController.getAllComplaints);

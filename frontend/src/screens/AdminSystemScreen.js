@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert } from 'react-native';
-import { Tags, Building2, UserX, ArrowLeft, Trash2, Plus, UserCheck } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, FlatList, Alert, ActivityIndicator, TextInput } from 'react-native';
+import { Tags, Building2, UserX, ArrowLeft, Plus, UserCheck } from 'lucide-react-native';
+import api from '../services/api';
 
 export default function AdminSystemScreen({ darkMode }) {
   const [view, setView] = useState('main'); 
-  const [categories] = useState(['Water Leak', 'Waste', 'Roads', 'Power']);
-  const [depts] = useState(['DWASA', 'City Corp', 'DESCO']);
+  const [categories, setCategories] = useState([]);
+  const [depts, setDepts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
+  const [newDept, setNewDept] = useState('');
   
   // Anonymous Data with Strikes
   const [offenders] = useState([
@@ -15,6 +20,58 @@ export default function AdminSystemScreen({ darkMode }) {
   const [bannedUsers, setBannedUsers] = useState([
     { id: 'User 001', reason: 'Abusive Language', date: 'Dec 20' }
   ]);
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      setLoading(true);
+      await Promise.all([fetchCategories(), fetchDepartments()]);
+      setLoading(false);
+    };
+    bootstrap();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/complaints/categories');
+      setCategories(response.data || []);
+    } catch (error) {
+      Alert.alert('Error', 'Could not load categories.');
+    }
+  };
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await api.get('/departments');
+      setDepts(response.data || []);
+    } catch (error) {
+      Alert.alert('Error', 'Could not load departments.');
+    }
+  };
+
+  const handleAdd = async (type) => {
+    const value = type === 'cat' ? newCategory.trim() : newDept.trim();
+    if (!value) {
+      Alert.alert('Missing info', `Please enter a ${type === 'cat' ? 'category' : 'department'} name.`);
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      if (type === 'cat') {
+        await api.post('/complaints/categories', { name: value });
+        setNewCategory('');
+        await fetchCategories();
+      } else {
+        await api.post('/departments', { name: value });
+        setNewDept('');
+        await fetchDepartments();
+      }
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.message || 'Unable to save.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleLiftBan = (id) => {
     Alert.alert("Lift Ban", `Unban ${id}?`, [
@@ -43,15 +100,37 @@ export default function AdminSystemScreen({ darkMode }) {
   if (view === 'cat' || view === 'dept') return (
     <View style={styles.container}>
       <SubHeader title={view === 'cat' ? "Categories" : "Departments"} />
-      <FlatList 
-        data={view === 'cat' ? categories : depts}
-        renderItem={({ item }) => (
-          <View style={[styles.listItem, darkMode && styles.cardDark]}>
-            <Text style={[styles.itemText, darkMode && {color: 'white'}]}>{item}</Text>
-            <TouchableOpacity><Trash2 size={18} color="#EF4444" /></TouchableOpacity>
-          </View>
-        )}
-      />
+      {loading ? (
+        <ActivityIndicator color="#1E88E5" />
+      ) : (
+        <FlatList 
+          data={view === 'cat' ? categories : depts}
+          keyExtractor={(item) => String(item?.id || item?.name)}
+          renderItem={({ item }) => (
+            <View style={[styles.listItem, darkMode && styles.cardDark]}>
+              <Text style={[styles.itemText, darkMode && {color: 'white'}]}>{item?.name || item}</Text>
+            </View>
+          )}
+          ListEmptyComponent={<Text style={[styles.emptyText, darkMode && {color: 'white'}]}>No items yet.</Text>}
+          ListFooterComponent={
+            <View style={[styles.addCard, darkMode && styles.cardDark]}>
+              <Text style={[styles.addLabel, darkMode && {color: 'white'}]}>Add {view === 'cat' ? 'Category' : 'Department'}</Text>
+              <View style={styles.addRow}>
+                <TextInput
+                  style={[styles.input, darkMode && styles.inputDark]}
+                  placeholder={view === 'cat' ? 'e.g. Drainage' : 'e.g. DPHE'}
+                  placeholderTextColor={darkMode ? '#9CA3AF' : '#9CA3AF'}
+                  value={view === 'cat' ? newCategory : newDept}
+                  onChangeText={(text) => view === 'cat' ? setNewCategory(text) : setNewDept(text)}
+                />
+                <TouchableOpacity style={styles.addBtn} onPress={() => handleAdd(view === 'cat' ? 'cat' : 'dept')} disabled={isSubmitting}>
+                  {isSubmitting ? <ActivityIndicator color="white" /> : <Plus color="white" size={16} />}
+                </TouchableOpacity>
+              </View>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 
@@ -101,6 +180,13 @@ const styles = StyleSheet.create({
   listItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'white', padding: 15, borderRadius: 15, marginBottom: 10 },
   itemText: { fontWeight: 'bold' },
   cardDark: { backgroundColor: '#1F2937' },
+  emptyText: { textAlign: 'center', color: '#9CA3AF', marginTop: 10 },
+  addCard: { backgroundColor: 'white', padding: 15, borderRadius: 12, marginTop: 10 },
+  addLabel: { fontWeight: 'bold', marginBottom: 8 },
+  addRow: { flexDirection: 'row', alignItems: 'center' },
+  input: { flex: 1, backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, marginRight: 10 },
+  inputDark: { backgroundColor: '#111827', color: 'white' },
+  addBtn: { backgroundColor: '#1E88E5', padding: 12, borderRadius: 10 },
   sectionLabel: { fontSize: 11, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 15 },
   offenderCard: { backgroundColor: 'white', padding: 15, borderRadius: 15, marginBottom: 10 },
   offRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

@@ -1,4 +1,5 @@
 const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, Upvote, ComplaintReport, sequelize } = require('../models');
+const { Op } = require('sequelize');
 const supabase = require('../config/supabase'); // Import Supabase client
 const axios = require('axios');
 
@@ -120,6 +121,278 @@ exports.getCategories = async (req, res) => {
     res.status(500).json({
       message: 'Server error while fetching categories.',
     });
+  }
+};
+
+/* =========================
+   ADMIN KPI METRICS
+========================= */
+exports.getAdminKpis = async (_req, res) => {
+  try {
+    // Basic counts
+    const totalComplaints = await Complaint.count();
+    const pending = await Complaint.count({ where: { currentStatus: 'pending' } });
+    const resolved = await Complaint.findAll({
+      where: { currentStatus: 'resolved' },
+      attributes: ['createdAt', 'updatedAt'],
+      order: [['updatedAt', 'DESC']],
+      limit: 200
+    });
+
+    // Avg resolve time (simple)
+    let avgSolveHours = null;
+    if (resolved.length > 0) {
+      const durations = resolved
+        .map(r => {
+          const c = r.createdAt ? new Date(r.createdAt).getTime() : null;
+          const u = r.updatedAt ? new Date(r.updatedAt).getTime() : null;
+          if (!Number.isFinite(c) || !Number.isFinite(u)) return null;
+          return Math.max(0, u - c);
+        })
+        .filter(x => Number.isFinite(x));
+      if (durations.length > 0) {
+        const totalMs = durations.reduce((a, b) => a + b, 0);
+        avgSolveHours = totalMs / durations.length / 1000 / 60 / 60;
+      }
+    }
+
+    // Service health: % resolved of total
+    const serviceHealth = totalComplaints > 0
+      ? Number(((resolved.length / totalComplaints) * 100).toFixed(1))
+      : 100;
+
+    res.json({
+      serviceHealth,
+      avgSolveHours,
+      pending,
+    });
+  } catch (error) {
+    console.error('Get Admin KPIs Error:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ message: 'Server error while fetching admin KPIs.' });
+  }
+};
+
+/* =========================
+   ADMIN KPI DETAILS (simple)
+========================= */
+exports.getAdminKpiDetails = async (_req, res) => {
+  try {
+    const total = await Complaint.count();
+    const pendingCount = await Complaint.count({ where: { currentStatus: 'pending' } });
+    const resolvedRows = await Complaint.findAll({
+      where: { currentStatus: 'resolved' },
+      attributes: ['id', 'title', 'createdAt', 'updatedAt', 'categoryId'],
+      include: [{ model: Category, attributes: ['name'], required: false }],
+      order: [['updatedAt', 'DESC']],
+      limit: 50,
+    });
+
+    const pendingRows = await Complaint.findAll({
+      where: { currentStatus: 'pending' },
+      attributes: ['id', 'title', 'createdAt', 'categoryId'],
+      include: [{ model: Category, attributes: ['name'], required: false }],
+      order: [['createdAt', 'DESC']],
+      limit: 50,
+    });
+
+    let avgSolveHours = null;
+    if (resolvedRows.length > 0) {
+      const durations = resolvedRows
+        .map(r => {
+          const c = r.createdAt ? new Date(r.createdAt).getTime() : null;
+          const u = r.updatedAt ? new Date(r.updatedAt).getTime() : null;
+          if (!Number.isFinite(c) || !Number.isFinite(u)) return null;
+          return Math.max(0, u - c);
+        })
+        .filter(x => Number.isFinite(x));
+      if (durations.length > 0) {
+        const totalMs = durations.reduce((a, b) => a + b, 0);
+        avgSolveHours = totalMs / durations.length / 1000 / 60 / 60;
+      }
+    }
+
+    const serviceHealth = total > 0
+      ? Number(((resolvedRows.length / total) * 100).toFixed(1))
+      : 100;
+
+    res.json({
+      total,
+      pending: pendingCount,
+      resolved: resolvedRows.length,
+      serviceHealth,
+      avgSolveHours,
+      resolvedList: resolvedRows.map(r => ({
+        id: r.id,
+        title: r.title,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        category: r.Category?.name || 'Uncategorized'
+      })),
+      pendingList: pendingRows.map(p => ({
+        id: p.id,
+        title: p.title,
+        createdAt: p.createdAt,
+        category: p.Category?.name || 'Uncategorized'
+      })),
+    });
+  } catch (error) {
+    console.error('Get Admin KPI Details Error:', error.message);
+    console.error('Stack:', error.stack);
+    res.status(500).json({ message: 'Server error while fetching admin KPI details.' });
+  }
+};
+
+/* =========================
+   ADMIN MODERATION OVERVIEW
+========================= */
+exports.getModerationOverview = async (_req, res) => {
+  try {
+    const [reportedTotal, reportedPending, appealsPending, appealsTotal] = await Promise.all([
+      ComplaintReport.count(),
+      ComplaintReport.count({ where: { status: 'pending' } }),
+      Complaint.count({ where: { currentStatus: 'appealed' } }),
+      Complaint.count({ where: { appealStatus: { [Op.ne]: 'none' } } })
+    ]);
+
+    res.json({
+      reportedTotal,
+      reportedPending,
+      appealsPending,
+      appealsTotal
+    });
+  } catch (error) {
+    console.error('Get Moderation Overview Error:', error.message);
+    res.status(500).json({ message: 'Server error while fetching moderation overview.' });
+  }
+};
+
+/* =========================
+   CREATE CATEGORY
+========================= */
+exports.createCategory = async (req, res) => {
+  try {
+    const name = req.body?.name?.trim();
+    const description = req.body?.description?.trim();
+
+    if (!name) {
+      return res.status(400).json({ message: 'Category name is required.' });
+    }
+
+    const [category, created] = await Category.findOrCreate({
+      where: { name },
+      defaults: { description },
+    });
+
+    return res.status(created ? 201 : 200).json({
+      message: created ? 'Category created successfully.' : 'Category already exists.',
+      category,
+    });
+  } catch (error) {
+    console.error('Create Category Error:', error.message);
+    res.status(500).json({
+      message: 'Server error while creating category.',
+    });
+  }
+};
+
+/* =========================
+   DELETE CATEGORY (SAFE)
+========================= */
+exports.deleteCategory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Category id is required.' });
+    }
+
+    const complaintCount = await Complaint.count({ where: { categoryId: id } });
+    if (complaintCount > 0) {
+      return res.status(400).json({ message: 'Category cannot be deleted because complaints reference it.' });
+    }
+
+    const deleted = await Category.destroy({ where: { id } });
+    if (!deleted) {
+      return res.status(404).json({ message: 'Category not found.' });
+    }
+
+    return res.json({ message: 'Category deleted.' });
+  } catch (error) {
+    console.error('Delete Category Error:', error.message);
+    res.status(500).json({ message: 'Server error while deleting category.' });
+  }
+};
+
+/* =========================
+   GET DEPARTMENTS
+========================= */
+exports.getDepartments = async (_req, res) => {
+  try {
+    const departments = await AuthorityCompany.findAll({
+      attributes: ['id', 'name', 'description'],
+    });
+    res.json(departments);
+  } catch (error) {
+    console.error('Get Departments Error:', error.message);
+    res.status(500).json({
+      message: 'Server error while fetching departments.',
+    });
+  }
+};
+
+/* =========================
+   CREATE DEPARTMENT
+========================= */
+exports.createDepartment = async (req, res) => {
+  try {
+    const name = req.body?.name?.trim();
+    const description = req.body?.description?.trim();
+
+    if (!name) {
+      return res.status(400).json({ message: 'Department name is required.' });
+    }
+
+    const [department, created] = await AuthorityCompany.findOrCreate({
+      where: { name },
+      defaults: { description },
+    });
+
+    return res.status(created ? 201 : 200).json({
+      message: created ? 'Department created successfully.' : 'Department already exists.',
+      department,
+    });
+  } catch (error) {
+    console.error('Create Department Error:', error.message);
+    res.status(500).json({
+      message: 'Server error while creating department.',
+    });
+  }
+};
+
+/* =========================
+   DELETE DEPARTMENT (SAFE)
+========================= */
+exports.deleteDepartment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'Department id is required.' });
+    }
+
+    const assignments = await ComplaintAssignment.count({ where: { authorityCompanyId: id } });
+    if (assignments > 0) {
+      return res.status(400).json({ message: 'Department cannot be deleted because complaints are assigned to it.' });
+    }
+
+    const deleted = await AuthorityCompany.destroy({ where: { id } });
+    if (!deleted) {
+      return res.status(404).json({ message: 'Department not found.' });
+    }
+
+    return res.json({ message: 'Department deleted.' });
+  } catch (error) {
+    console.error('Delete Department Error:', error.message);
+    res.status(500).json({ message: 'Server error while deleting department.' });
   }
 };
 
