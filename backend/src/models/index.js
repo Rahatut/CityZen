@@ -9,6 +9,7 @@ const AuthorityCompany = require('./AuthorityCompany');
 const ComplaintImages = require('./ComplaintImages');
 const ComplaintAssignment = require('./ComplaintAssignment');
 const AuthorityCompanyCategory = require('./AuthorityCompanyCategory');
+const AuthorityCompanyAreas = require('./AuthorityCompanyAreas');
 const Upvote = require('./Upvote');
 const ComplaintReport = require('./ComplaintReport');
 
@@ -87,6 +88,10 @@ AuthorityCompany.belongsToMany(Complaint, {
   otherKey: 'complaintId'
 });
 
+// AuthorityCompanyAreas Associations
+AuthorityCompany.hasMany(AuthorityCompanyAreas, { foreignKey: 'authorityCompanyId' });
+AuthorityCompanyAreas.belongsTo(AuthorityCompany, { foreignKey: 'authorityCompanyId' });
+
 // Upvote Associations
 Complaint.hasMany(Upvote, { foreignKey: 'complaintId' });
 Upvote.belongsTo(Complaint, { foreignKey: 'complaintId' });
@@ -110,6 +115,7 @@ module.exports = {
   Category,
   AuthorityCompanyCategory,
   ComplaintAssignment,
+  AuthorityCompanyAreas,
   Upvote,
   ComplaintReport
 };
