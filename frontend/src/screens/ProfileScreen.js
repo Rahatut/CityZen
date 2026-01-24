@@ -32,7 +32,6 @@ export default function ProfileScreen({ navigation, onLogout, darkMode, toggleDa
 
   const handleLogout = () => {
     if (onLogout) onLogout();
-    navigation.replace('Login');
   };
 
   return (

@@ -36,6 +36,10 @@ export default function UserComplaintListScreen({ navigation, route, darkMode, t
                     allComplaints = allComplaints.filter(c => c.currentStatus === 'pending');
                 } else if (statusFilter === 'in_progress') {
                     allComplaints = allComplaints.filter(c => ['in_progress', 'accepted', 'assigned'].includes(c.currentStatus));
+                } else if (statusFilter === 'appealed') {
+                    allComplaints = allComplaints.filter(c => c.currentStatus === 'appealed');
+                } else if (statusFilter === 'rejected') {
+                    allComplaints = allComplaints.filter(c => c.currentStatus === 'rejected');
                 }
             }
 
@@ -57,6 +61,8 @@ export default function UserComplaintListScreen({ navigation, route, darkMode, t
         const isResolved = ['resolved', 'closed', 'completed'].includes(status);
         const isPending = status === 'pending';
         const isInProgress = ['in_progress', 'accepted'].includes(status);
+        const isAppealed = status === 'appealed';
+        const isRejected = status === 'rejected';
 
         let bg = '#F3F4F6';
         let color = '#374151';
@@ -65,6 +71,8 @@ export default function UserComplaintListScreen({ navigation, route, darkMode, t
         if (isResolved) { bg = '#D1FAE5'; color = '#065F46'; }
         else if (isPending) { bg = '#FEF3C7'; color = '#92400E'; }
         else if (isInProgress) { bg = '#DBEAFE'; color = '#1E40AF'; }
+        else if (isAppealed) { bg = '#FAF5FF'; color = '#7E22CE'; }
+        else if (isRejected) { bg = '#FEE2E2'; color = '#991B1B'; }
 
         return (
             <View style={[styles.badge, { backgroundColor: bg }]}>

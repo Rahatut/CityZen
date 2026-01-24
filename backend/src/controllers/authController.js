@@ -14,7 +14,7 @@ exports.registerProfile = async (req, res) => {
     if (!firebaseUid || !email || !fullName || !role) {
       return res.status(400).json({ message: 'Missing core identity fields.' });
     }
-    
+
     // 1. Create the base User
     const user = await User.create({ firebaseUid, email, fullName, role }, { transaction: t });
 
@@ -36,9 +36,9 @@ exports.registerProfile = async (req, res) => {
   } catch (error) {
     // Rollback if any step failed (e.g., missing data, invalid Admin code, DB error)
     await t.rollback();
-    
+
     console.error('Registration Error:', error.message);
-    
+
     // Send a 400 status with a specific error message back to the frontend
     res.status(400).json({ message: `Profile creation failed: ${error.message}` });
   }
@@ -50,10 +50,14 @@ exports.getProfileByUid = async (req, res) => {
     const { firebaseUid } = req.params;
 
     // Find the user in the PostgreSQL database using the UID obtained from Firebase login
-    const user = await User.findOne({ 
+    const user = await User.findOne({
       where: { firebaseUid },
-      // FIX: Removed 'id' to fix the "column id does not exist" error.
-      attributes: ['firebaseUid', 'email', 'fullName', 'role', 'createdAt']
+      attributes: ['firebaseUid', 'email', 'fullName', 'role', 'createdAt'],
+      include: [
+        { model: Citizen, required: false },
+        { model: Authority, required: false },
+        { model: Admin, required: false }
+      ]
     });
 
     if (!user) {
