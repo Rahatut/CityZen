@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  FlatList, Image, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, ActivityIndicator
+  FlatList, Image, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -120,6 +120,11 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
     fetchCategories();
     fetchProfile();
   }, []);
+
+  const openGoogleMaps = (latitude, longitude) => {
+    const url = `https://www.google.com/maps/search/${latitude},${longitude}`;
+    Linking.openURL(url).catch(err => console.log('Could not open Google Maps', err));
+  };
 
 
   const kpis = [
@@ -312,7 +317,17 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
       <Image source={{ uri: selectedItem.citizenProof }} style={styles.heroImage} />
       <View style={[styles.detailCard, darkMode && styles.cardDark]}>
         <Text style={[styles.detailTitle, darkMode && styles.textWhite]}>{selectedItem.title}</Text>
-        <View style={styles.detailLocRow}><MapPin size={16} color="#6B7280" /><Text style={styles.detailLocText}>{selectedItem.location} • {selectedItem.ward}</Text></View>
+        <View style={styles.detailLocRow}>
+          <MapPin size={16} color="#6B7280" />
+          <Text style={styles.detailLocText}>{selectedItem.location} • {selectedItem.ward}</Text>
+          <TouchableOpacity 
+            style={styles.mapsButton}
+            onPress={() => openGoogleMaps(selectedItem.latitude, selectedItem.longitude)}
+          >
+            <Map size={16} color="white" />
+            <Text style={styles.mapsButtonText}>Maps</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={[styles.detailDesc, darkMode && styles.textGray]}>{selectedItem.description}</Text>
         <View style={styles.cardDivider} />
         <Text style={styles.sectionLabel}>Administrative Actions</Text>
@@ -693,8 +708,22 @@ const styles = StyleSheet.create({
   heroImage: { width: '100%', height: 300 },
   detailCard: { marginTop: -20, borderTopLeftRadius: 25, borderTopRightRadius: 25, backgroundColor: 'white', padding: 20, minHeight: 400 },
   detailTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 10 },
-  detailLocRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  detailLocText: { color: '#6B7280', marginLeft: 5 },
+  detailLocRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, gap: 8 },
+  detailLocText: { color: '#6B7280', marginLeft: 5, flex: 1 },
+  mapsButton: {
+    flexDirection: 'row',
+    backgroundColor: '#1E88E5',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    gap: 6
+  },
+  mapsButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold'
+  },
   detailDesc: { fontSize: 15, lineHeight: 22, color: '#4B5563' },
   sectionLabel: { fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 10 },
 

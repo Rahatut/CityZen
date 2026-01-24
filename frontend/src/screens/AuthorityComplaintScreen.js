@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions } from 'react-native';
-import { CheckCircle, XCircle, Clock, MapPin, ArrowLeft, ThumbsUp, Users } from 'lucide-react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, Linking } from 'react-native';
+import { CheckCircle, XCircle, Clock, MapPin, ArrowLeft, ThumbsUp, Users, MapIcon } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -9,12 +9,14 @@ export default function AuthorityComplaintsScreen({ darkMode }) {
   const [complaints, setComplaints] = useState([
     { 
       id: '1', title: 'Leaking Pipe', location: 'Dhanmondi 27', ward: 'Ward 15', 
+      latitude: 23.7579, longitude: 90.3819,
       status: 'Pending', time: '1h ago', upvotes: 142, 
       desc: 'Main water line burst near the main road. Significant flooding and low pressure in nearby buildings.',
       img: 'https://images.unsplash.com/photo-1542013936693-884638332954?auto=format&fit=crop&w=500' 
     },
     { 
       id: '2', title: 'Streetlight Out', location: 'Banani 11', ward: 'Ward 19', 
+      latitude: 23.8103, longitude: 90.4129,
       status: 'Accepted', time: '5h ago', upvotes: 38, 
       desc: 'Three lamps in a row are non-functional. Area is pitch black at night, causing safety concerns.',
       img: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?auto=format&fit=crop&w=500' 
@@ -25,6 +27,11 @@ export default function AuthorityComplaintsScreen({ darkMode }) {
     if (status === 'Pending') return '#F59E0B';
     if (status === 'Accepted') return '#1E88E5';
     return '#10B981';
+  };
+
+  const openGoogleMaps = (latitude, longitude) => {
+    const url = `https://www.google.com/maps/search/${latitude},${longitude}`;
+    Linking.openURL(url).catch(err => console.log('Could not open Google Maps', err));
   };
 
   const ActionRow = ({ item }) => (
@@ -62,10 +69,17 @@ export default function AuthorityComplaintsScreen({ darkMode }) {
 
           <View style={styles.locationContainer}>
             <MapPin size={20} color="#1E88E5" />
-            <View style={{ marginLeft: 10 }}>
+            <View style={{ marginLeft: 10, flex: 1 }}>
               <Text style={[styles.locMain, darkMode && styles.textWhite]}>{selectedComplaint.location}</Text>
               <Text style={styles.locSub}>{selectedComplaint.ward}</Text>
             </View>
+            <TouchableOpacity 
+              style={styles.mapsButton}
+              onPress={() => openGoogleMaps(selectedComplaint.latitude, selectedComplaint.longitude)}
+            >
+              <MapIcon size={18} color="white" />
+              <Text style={styles.mapsButtonText}>Maps</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.priorityBox}>
@@ -143,6 +157,20 @@ const styles = StyleSheet.create({
   locationContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   locMain: { fontSize: 18, fontWeight: 'bold' },
   locSub: { fontSize: 13, color: '#6B7280' },
+  mapsButton: { 
+    flexDirection: 'row', 
+    backgroundColor: '#1E88E5', 
+    paddingHorizontal: 12, 
+    paddingVertical: 10, 
+    borderRadius: 8, 
+    alignItems: 'center',
+    gap: 6
+  },
+  mapsButtonText: { 
+    color: 'white', 
+    fontSize: 13, 
+    fontWeight: 'bold' 
+  },
   priorityBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FDF4', padding: 12, borderRadius: 10, marginBottom: 20 },
   priorityText: { color: '#15803D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 },
   sectionLabel: { fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 8 },
