@@ -1062,6 +1062,75 @@ exports.reportComplaint = async (req, res) => {
     });
   }
 };
+
+/* =========================
+ CHECK DUPLICATE COMPLAINTS
+========================= */
+exports.checkDuplicateComplaints = async (req, res) => {
+  try {
+    const { latitude, longitude, categoryId } = req.body;
+
+    if (!latitude || !longitude || !categoryId) {
+      return res.status(400).json({
+        message: 'Missing required fields: latitude, longitude, categoryId',
+      });
+    }
+
+    const searchRadius = 100; // meters
+
+    const query = `
+      SELECT
+        id,
+        title,
+        description,
+        latitude,
+        longitude,
+        "citizenUid",
+        "categoryId",
+        "currentStatus",
+        (
+          6371000 * acos(
+            cos(radians(:latitude)) * cos(radians(latitude))
+            * cos(radians(longitude) - radians(:longitude))
+            + sin(radians(:latitude)) * sin(radians(latitude))
+          )
+        ) AS distance
+      FROM "Complaints"
+      WHERE "categoryId" = :categoryId
+        AND "createdAt" >= NOW() - INTERVAL '30 days'
+        AND (
+          6371000 * acos(
+            cos(radians(:latitude)) * cos(radians(latitude))
+            * cos(radians(longitude) - radians(:longitude))
+            + sin(radians(:latitude)) * sin(radians(latitude))
+          )
+        ) < :searchRadius
+      ORDER BY distance;
+    `;
+
+    const nearbyComplaints = await sequelize.query(query, {
+      replacements: {
+        latitude: Number(latitude),
+        longitude: Number(longitude),
+        categoryId: Number(categoryId),
+        searchRadius,
+      },
+      type: sequelize.QueryTypes.SELECT,
+    });
+
+    return res.status(200).json({
+      isDuplicate: nearbyComplaints.length > 0,
+      complaints: nearbyComplaints,
+    });
+
+  } catch (error) {
+    console.error('Check Duplicate Complaints Error:', error);
+    res.status(500).json({
+      message: 'Server error while checking for duplicate complaints.',
+    });
+  }
+};
+
 /* =========================
    GET REPORTED COMPLAINTS (ADMIN)
 ========================= */

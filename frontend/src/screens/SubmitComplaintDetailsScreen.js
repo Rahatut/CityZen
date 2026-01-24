@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Activi
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { useComplaint } from '../context/ComplaintContext';
+import { complaintAPI } from '../services/api';
 
 import { Camera, Image as ImageIcon, Sparkles, MapPin, Trash2, ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle, Shield } from 'lucide-react-native';
 import * as ImagePicker from "expo-image-picker";
@@ -113,6 +114,31 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     }, [aiResult, location]);
 
     useEffect(() => {
+        const checkDuplicate = async () => {
+            if (location && selectedCategory) {
+                try {
+                    const result = await complaintAPI.checkDuplicate(location.latitude, location.longitude, selectedCategory.id);
+                    if (result.isDuplicate) {
+                        Alert.alert(
+                            "Duplicate Complaint Found",
+                            "A similar complaint has already been reported in this area. Are you sure you want to proceed?",
+                            [
+                                { text: "Cancel", style: "cancel" },
+                                { text: "Proceed", onPress: () => { } }
+                            ]
+                        );
+                    }
+                } catch (error) {
+                    console.error("Error checking for duplicate complaints:", error);
+                }
+            }
+        };
+        checkDuplicate();
+    }, [location, selectedCategory]);
+
+
+
+    useEffect(() => {
         const fetchCategories = async () => {
             try {
                 const response = await axios.get(`${API_URL}/api/complaints/categories`, {
@@ -161,6 +187,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
             handleGPSDetect();
         }
     }, []);
+
 
 
     //Permissions

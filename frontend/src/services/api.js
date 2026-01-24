@@ -94,4 +94,20 @@ export const authAPI = {
   }
 };
 
+// Complaint API calls
+export const complaintAPI = {
+  checkDuplicate: async (latitude, longitude, categoryId) => {
+    try {
+      const response = await api.post('/complaints/check-duplicate', {
+        latitude,
+        longitude,
+        categoryId,
+      });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Network error' };
+    }
+  }
+};
+
 export default api;

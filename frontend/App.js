@@ -57,7 +57,7 @@ export default function App() {
         }}>
           <NavigationAware />
           <StatusBar barStyle={darkMode ? "light-content" : "dark-content"} backgroundColor={darkMode ? "#1F2937" : "#FFFFFF"} />
-          <Stack.Navigator initialRouteName="Landing" screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: darkMode ? '#111827' : '#F9FAFB' } }}>
+          <Stack.Navigator initialRouteName="HomeScreen" screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: darkMode ? '#111827' : '#F9FAFB' } }}>
             <Stack.Screen name="Landing">{(props) => <LandingScreen {...props} darkMode={darkMode} />}</Stack.Screen>
             <Stack.Screen name="Login">{(props) => <LoginScreen {...props} onLogin={() => props.navigation.replace('HomeScreen')} />}</Stack.Screen>
             <Stack.Screen name="Signup">{(props) => <SignupScreen {...props} onSignup={() => props.navigation.replace('HomeScreen')} />}</Stack.Screen>

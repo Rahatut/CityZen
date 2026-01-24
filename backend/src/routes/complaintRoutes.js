@@ -7,6 +7,7 @@ const upload = multer({ storage: multer.memoryStorage() }); // Configure multer 
 
 // Create complaint with images
 router.post('/complaints', upload.array('images'), complaintController.createComplaint);
+router.post('/complaints/check-duplicate', complaintController.checkDuplicateComplaints);
 
 // Get all categories
 router.get('/complaints/categories', complaintController.getCategories);
