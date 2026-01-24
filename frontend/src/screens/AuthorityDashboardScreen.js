@@ -8,11 +8,12 @@ import * as ImagePicker from 'expo-image-picker';
 
 
 import Navigation from '../components/Navigation';
+import AuthorityMapView from '../components/AuthorityMapView';
 import {
   BarChart2, ClipboardList, User, MapPin, Clock,
   ThumbsUp, Camera, CheckCircle, XCircle, ArrowLeft,
   ChevronRight, Search, LogOut, HardHat, TrendingUp, AlertCircle,
-  ShieldCheck, Award, Settings, Phone, Mail, RefreshCw, Filter, X
+  ShieldCheck, Award, Settings, Phone, Mail, RefreshCw, Filter, X, Map
 } from 'lucide-react-native';
 import api from '../services/api';
 
@@ -21,6 +22,8 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
   const [workSubTab, setWorkSubTab] = useState('new');
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [workViewMode, setWorkViewMode] = useState('list'); // 'list' or 'map'
+  const [mapVisible, setMapVisible] = useState(false);
 
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [actionType, setActionType] = useState('');
@@ -66,6 +69,8 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
               id: c.id,
               title: c.title,
               location: `Lat: ${c.latitude}, Long: ${c.longitude}`,
+              latitude: c.latitude,
+              longitude: c.longitude,
               ward: 'Unknown Ward', // Placeholder
               status: statusMap[c.currentStatus] || c.currentStatus.charAt(0).toUpperCase() + c.currentStatus.slice(1),
               time: new Date(c.createdAt).toLocaleDateString(),
@@ -249,7 +254,12 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
       <View style={styles.paddedContent}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={[styles.screenTitle, darkMode && styles.textWhite]}>Operational Queue</Text>
-          <TouchableOpacity onPress={fetchComplaints}><RefreshCw size={20} color={darkMode ? "white" : "black"} /></TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 20 }}>
+            <TouchableOpacity onPress={() => setWorkViewMode(workViewMode === 'map' ? 'list' : 'map')}>
+              <Map size={20} color={workViewMode === 'map' ? "#1E88E5" : (darkMode ? "white" : "black")} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={fetchComplaints}><RefreshCw size={20} color={darkMode ? "white" : "black"} /></TouchableOpacity>
+          </View>
         </View>
         <View style={[styles.toggleBar, darkMode && styles.toggleBarDark]}>
           <TouchableOpacity style={[styles.toggleTab, workSubTab === 'new' && styles.toggleActive]} onPress={() => setWorkSubTab('new')}>
@@ -259,22 +269,36 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
             <Text style={[styles.toggleText, workSubTab === 'active' && styles.toggleTextActive]}>Under Repair</Text>
           </TouchableOpacity>
         </View>
-        <FlatList
-          data={data}
-          keyExtractor={item => item.id}
-          contentContainerStyle={{ paddingBottom: 150 }}
-          style={{ flex: 1 }}
-          renderItem={({ item }) => (
-            <View style={[styles.workCard, darkMode && styles.cardDark]}>
-              <TouchableOpacity onPress={() => { setSelectedItem(item); setActiveTab('details'); }}>
-                <Text style={[styles.workTitle, darkMode && styles.textWhite]} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.workLoc}>{item.location} • {item.ward}</Text>
-              </TouchableOpacity>
-              <View style={styles.cardDivider} />
-              <ActionButtons item={item} />
-            </View>
-          )}
-        />
+
+        {workViewMode === 'map' ? (
+          <View style={{ flex: 1, marginTop: 16 }}>
+            <AuthorityMapView
+              complaints={data}
+              darkMode={darkMode}
+              onComplaintSelect={(complaint) => {
+                setSelectedItem(complaint);
+                setActiveTab('details');
+              }}
+            />
+          </View>
+        ) : (
+          <FlatList
+            data={data}
+            keyExtractor={item => item.id}
+            contentContainerStyle={{ paddingBottom: 150 }}
+            style={{ flex: 1 }}
+            renderItem={({ item }) => (
+              <View style={[styles.workCard, darkMode && styles.cardDark]}>
+                <TouchableOpacity onPress={() => { setSelectedItem(item); setActiveTab('details'); }}>
+                  <Text style={[styles.workTitle, darkMode && styles.textWhite]} numberOfLines={1}>{item.title}</Text>
+                  <Text style={styles.workLoc}>{item.location} • {item.ward}</Text>
+                </TouchableOpacity>
+                <View style={styles.cardDivider} />
+                <ActionButtons item={item} />
+              </View>
+            )}
+          />
+        )}
       </View>
     );
   };
