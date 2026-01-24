@@ -39,40 +39,45 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
     });
   };
 
+  const locationKey = location?.latitude && location?.longitude
+  ? `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`
+  : null;
+
+
   useEffect(() => {
+    setChosenAuthorities([]);
+  }, [selectedCategory?.id, locationKey]);
+  
+
+  useEffect(() => {
+    if (!selectedCategory || !locationKey) return;
+  
     const fetchRecommendedAuthority = async () => {
-      if (selectedCategory && location.latitude && location.longitude) {
-        setLoadingRecommendation(true);
-        try {
-          const response = await axios.get(`${API_URL}/api/complaints/recommend-authorities`, {
+      setLoadingRecommendation(true);
+      try {
+        const response = await axios.get(
+          `${API_URL}/api/complaints/recommend-authorities`,
+          {
             params: {
-              category: selectedCategory.name,
+              categoryId: selectedCategory.id,
               latitude: location.latitude,
               longitude: location.longitude,
-              location_string: location.fullAddress,
             },
-            headers: {
-              'bypass-tunnel-reminder': 'true'
-            }
-          });
-          setRecommendedAuthorities(response.data);
-        } catch (error) {
-          console.error('Error fetching recommended authority:', error);
-        } finally {
-          setLoadingRecommendation(false);
-        }
+            headers: { 'bypass-tunnel-reminder': 'true' }
+          }
+        );
+        setRecommendedAuthorities(response.data);
+      } catch (error) {
+        console.error('Error fetching recommended authority:', error);
+      } finally {
+        setLoadingRecommendation(false);
       }
     };
-
-    // Debounce the fetch
-    const handler = setTimeout(() => {
-      fetchRecommendedAuthority();
-    }, 1000); // 1 second debounce
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [selectedCategory, location, description]);
+  
+    const handler = setTimeout(fetchRecommendedAuthority, 800);
+    return () => clearTimeout(handler);
+  }, [selectedCategory?.id, locationKey]);
+  
 
   const handleSubmit = async () => {
     const newErrors = {};
@@ -117,7 +122,7 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
 
     formData.append('citizenUid', uid);
     formData.append('categoryId', selectedCategory.id);
-    formData.append('chosenAuthorities', JSON.stringify(chosenAuthorities));
+    formData.append('chosenAuthorities', JSON.stringify(chosenAuthorities.map(Number)));
 
     if (!uid) {
       Alert.alert('Error', 'Could not identify user. Please log in again.');
@@ -149,8 +154,8 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
 
         // Map chosen authority IDs to their names and save to context
         const assignedAuthorityNames = chosenAuthorities.map(chosenId => {
-          const authority = recommendedAuthorities.find(rec => rec.authorityCompanyId === chosenId);
-          return authority ? authority.authorityName : 'Unknown Authority';
+          const authority = recommendedAuthorities.find(rec => rec.id === chosenId);
+          return authority ? authority.name : 'Unknown Authority';
         });
         setAssignedAuthorities(assignedAuthorityNames);
 
@@ -199,7 +204,7 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
 
           <Text style={[styles.label, darkMode && styles.textWhite, { marginTop: 12 }]}>Description</Text>
           <TextInput
-            style={[styles.input, { height: 80, textAlignVertical: 'top' }, darkMode && styles.inputDark]}
+            style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }, darkMode && styles.inputDark]}
             placeholder="Add any additional details (optional)"
             placeholderTextColor="#9CA3AF"
             multiline
@@ -207,35 +212,39 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
             onChangeText={setDescription}
           />
 
-          {/* AI Recommended Authorities */}
+          {/* Recommended Authorities */}
           {loadingRecommendation && <ActivityIndicator style={{ marginVertical: 16 }} color="#1E88E5" />}
           {recommendedAuthorities.length > 0 && (
             <View style={{ marginTop: 16 }}>
-              <Text style={[styles.label, darkMode && styles.textWhite]}>AI Recommended Authorities</Text>
-              {recommendedAuthorities.map((authority, index) => (
+              <Text style={[styles.label, darkMode && styles.textWhite]}>Recommended Authorities</Text>
+              {recommendedAuthorities.map((authority) => (
                 <TouchableOpacity
-                  key={index}
-                  onPress={() => handleChooseAuthority(authority.authorityCompanyId)}
+                  key={authority.id}
+                  onPress={() => handleChooseAuthority(authority.id)}
                   style={[
                     styles.card,
                     darkMode && styles.cardDark,
                     { padding: 16, marginBottom: 12 },
-                    chosenAuthorities.includes(authority.authorityCompanyId) && styles.selectedCard
+                    chosenAuthorities.includes(authority.id) && styles.selectedCard
                   ]}
                 >
                   <Text style={[styles.dropdownText, darkMode && styles.textWhite, { fontWeight: 'bold' }]}>
-                    {authority.authorityName}
+                    {authority.name}
                   </Text>
                   <Text style={[styles.readOnlyLabel, darkMode && styles.textGray, { marginTop: 4 }]}>
-                    {authority.reason}
+                    {authority.description}
                   </Text>
-                  {/*<Text style={[styles.readOnlyLabel, darkMode && styles.textGray, { marginTop: 4, fontStyle: 'italic' }]}>
-                     Confidence: {(authority.confidence * 100).toFixed(0)}%
-                    </Text>*/}
                 </TouchableOpacity>
               ))}
             </View>
           )}
+          {!loadingRecommendation && recommendedAuthorities.length === 0 && (
+            <Text style={[styles.readOnlyLabel, darkMode && styles.textGray]}>
+              No authority recommendations found for this location.
+              Please select manually or try adjusting the category.
+            </Text>
+          )}
+
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>

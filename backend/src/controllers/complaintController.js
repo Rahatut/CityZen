@@ -577,56 +577,64 @@ exports.deleteComplaint = async (req, res) => {
 ========================= */
 exports.getRecommendedAuthorities = async (req, res) => {
   try {
-    const {
-      category,
-      description,
-      latitude,
-      longitude,
-      location_string,
-    } = req.query;
+    const { categoryId, latitude, longitude } = req.query;
 
-    // Validate that we have at least the basic info
-    if (!category || !latitude || !longitude) {
-      return res.status(400).json({ message: 'Missing required query parameters: category, latitude, longitude' });
+    if (!categoryId || !latitude || !longitude) {
+      return res.status(400).json({ message: 'Missing required query parameters: categoryId, latitude, longitude' });
     }
 
-    // Load authority list from DB to send to the AI recommendation service
-    const authorities = await AuthorityCompany.findAll({ attributes: ['id', 'name'] });
-    const authoritiesPayload = authorities.map((a) => ({ id: a.id, name: a.name }));
+    const userLat = parseFloat(latitude);
+    const userLon = parseFloat(longitude);
 
-    if (!process.env.OPENROUTER_API_URL) {
-      console.warn('OPENROUTER_API_URL not set; defaulting to http://localhost:8001');
+    const haversineDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371; // Radius of the Earth in kilometers
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c; // Distance in kilometers
+    };
+
+    const companiesForCategory = await sequelize.models.AuthorityCompanyCategory.findAll({
+      where: { categoryId: categoryId },
+      attributes: ['authorityCompanyId'],
+    });
+
+    if (companiesForCategory.length === 0) {
+      return res.json([]);
     }
-    const openRouterUrl = process.env.OPENROUTER_API_URL || 'http://localhost:8001';
 
-    // Call the OpenRouter / recommendation service
-    const openRouterResponse = await axios.post(`${openRouterUrl}/recommend-authority`, {
-      category,
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
-      location_string,
-      authorities: authoritiesPayload,
-    }, { timeout: 15000 });
+    const companyIds = companiesForCategory.map(c => c.authorityCompanyId);
 
-    const recommendations = openRouterResponse.data;
-    if (!Array.isArray(recommendations)) {
-      throw new Error('Invalid response from recommendation service');
+    const companyAreas = await sequelize.models.AuthorityCompanyAreas.findAll({
+      where: {
+        authorityCompanyId: companyIds,
+      },
+    });
+
+    const relevantCompanies = new Set();
+    companyAreas.forEach(area => {
+      const distance = haversineDistance(userLat, userLon, area.latitude, area.longitude);
+      if (distance <= area.radius) {
+        relevantCompanies.add(area.authorityCompanyId);
+      }
+    });
+
+    if (relevantCompanies.size === 0) {
+      return res.json([]);
     }
 
-    const enrichedRecommendations = await Promise.all(
-      recommendations.map(async (rec) => {
-        const authority = rec.authorityCompanyId
-          ? await AuthorityCompany.findByPk(rec.authorityCompanyId, { attributes: ['name'] })
-          : null;
+    const recommendedAuthorities = await AuthorityCompany.findAll({
+      where: {
+        id: Array.from(relevantCompanies),
+      },
+      attributes: ['id', 'name', 'description'],
+    });
 
-        return {
-          ...rec,
-          authorityName: authority ? authority.name : 'Unknown Authority'
-        };
-      })
-    );
-
-    res.status(200).json(enrichedRecommendations);
+    res.json(recommendedAuthorities);
 
   } catch (error) {
     console.error('Get Recommended Authorities Error:', error.message);

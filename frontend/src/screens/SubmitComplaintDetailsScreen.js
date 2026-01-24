@@ -51,6 +51,17 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     const [locating, setLocating] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState({});
+    const lastGenerationKeyRef = React.useRef(null);
+
+    const generationKey = aiResult && location
+    ? JSON.stringify({
+        label: aiResult.label,
+        confidence: Math.floor(aiResult.confidence), // avoid tiny float changes
+        lat: Number(location.latitude?.toFixed(5)),
+        lng: Number(location.longitude?.toFixed(5)),
+        })
+    : null;
+
 
     useEffect(() => {
         const runAllDetections = async () => {
@@ -73,7 +84,6 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
                     }
                 }
             }
-
             setAiResult(bestDetection); // store the best detection
         };
 
@@ -83,34 +93,44 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     useEffect(() => {
         if (!aiResult) return;
         if (aiResult.confidence < CONFIDENCE_THRESHOLD) return;
-        if (!location || !location.latitude || !location.longitude) return;
-
-        const CONFIDENCE_THRESHOLD = 75;
-        const aiApproved = aiResult.confidence >= CONFIDENCE_THRESHOLD;
-
-        if (!aiApproved) return;
-
+        if (!location?.latitude || !location?.longitude) return;
+        if (!generationKey) return;
+      
+        // Prevent unnecessary regeneration
+        if (lastGenerationKeyRef.current === generationKey) {
+          return;
+        }
+      
+        // Mark this input set as processed
+        lastGenerationKeyRef.current = generationKey;
+      
         const generateComplaintText = async () => {
-            try {
-                const response = await axios.post(`${OPENROUTER_API_URL}/generate_complaint_text`, {
-                    category: aiResult.label,
-                    confidence: aiResult.confidence,
-                    latitude: location.latitude,
-                    longitude: location.longitude,
-                    location_string: location.fullAddress,
-                });
-
-                if (response.data.title) setTitle(response.data.title);
-                if (response.data.description) setDescription(response.data.description);
-            } catch (error) {
-                console.error("Error generating complaint text with OpenRouter:", error);
-                Alert.alert("Generation Failed", "Could not generate complaint details. Please check your connection or try again.");
-            }
+          try {
+            const response = await axios.post(
+              `${OPENROUTER_API_URL}/generate_complaint_text`,
+              {
+                category: aiResult.label,
+                confidence: aiResult.confidence,
+                latitude: location.latitude,
+                longitude: location.longitude,
+                location_string: location.fullAddress,
+              }
+            );
+      
+            if (response.data.title) setTitle(response.data.title);
+            if (response.data.description) setDescription(response.data.description);
+          } catch (error) {
+            console.error("Error generating complaint text:", error);
+            Alert.alert(
+              "Generation Failed",
+              "Could not generate complaint details. Please try again."
+            );
+          }
         };
-
+      
         generateComplaintText();
-
-    }, [aiResult, location]);
+      }, [generationKey]);
+      
 
     useEffect(() => {
         const fetchCategories = async () => {
@@ -161,6 +181,14 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
             handleGPSDetect();
         }
     }, []);
+
+    useEffect(() => {
+      if (images.length === 0) {
+        setAiResult(null);
+        lastGenerationKeyRef.current = null;
+        return;
+        }
+    }, [images]);      
 
 
     //Permissions
@@ -251,6 +279,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     };
 
     const runAiDetection = async (imageUri) => {
+        activeDetections.current++;
         setAiLoading(true);
 
         const formData = new FormData();
@@ -272,7 +301,10 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
             Alert.alert("AI Error", "Failed to analyze image");
             return null;
         } finally {
-            setAiLoading(false);
+            activeDetections.current--;
+            if (activeDetections.current === 0) {
+                setAiLoading(false);
+            }
         }
     };
 
@@ -291,7 +323,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         if (result.assets?.length > 0) {
             const asset = result.assets[0];
             setImages(prev => [...prev, asset.uri]); // Append new image to array
-            await runAiDetection(asset.uri);
+            // await runAiDetection(asset.uri);
 
             const exifLocation = extractLocationFromExif(asset.exif);
             if (exifLocation) {
@@ -320,7 +352,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         if (result.assets?.length > 0) {
             const asset = result.assets[0];
             setImages(prev => [...prev, ...result.assets.map(a => a.uri)]); // Append new images to array
-            await runAiDetection(asset.uri);
+            // await runAiDetection(asset.uri);
 
             const exifLocation = extractLocationFromExif(asset.exif);
             if (exifLocation) {
