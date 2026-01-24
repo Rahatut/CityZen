@@ -36,7 +36,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     paddingVertical: 12,
-    paddingBottom: 24, // Extra padding for iPhone home indicator
+    paddingBottom: 55, // Extra padding for iPhone home indicator
     position: 'absolute',
     bottom: 0,
     left: 0,
