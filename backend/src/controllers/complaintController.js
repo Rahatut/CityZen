@@ -251,7 +251,7 @@ exports.getModerationOverview = async (_req, res) => {
     const [reportedTotal, reportedPending, appealsPending, appealsTotal] = await Promise.all([
       ComplaintReport.count(),
       ComplaintReport.count({ where: { status: 'pending' } }),
-      Complaint.count({ where: { currentStatus: 'appealed' } }),
+      Complaint.count({ where: { appealStatus: 'pending' } }),
       Complaint.count({ where: { appealStatus: { [Op.ne]: 'none' } } })
     ]);
 
@@ -1150,6 +1150,118 @@ exports.updateReportStatus = async (req, res) => {
     console.error('Update Report Status Error:', error.message);
     res.status(500).json({
       message: 'Server error while updating report status.'
+    });
+  }
+};
+
+/* =========================
+   GET ALL APPEALS (ADMIN)
+========================= */
+exports.getAppeals = async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    const whereClause = {
+      appealStatus: status === 'all' ? { [Op.ne]: 'none' } : (status || 'pending')
+    };
+
+    const appeals = await Complaint.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: Category,
+          attributes: ['id', 'name', 'description']
+        },
+        {
+          model: ComplaintImages,
+          as: 'images',
+          attributes: ['id', 'imageURL', 'type']
+        }
+      ],
+      order: [['updatedAt', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      count: appeals.length,
+      appeals
+    });
+  } catch (error) {
+    console.error('Get Appeals Error:', error);
+    res.status(500).json({
+      message: 'Server error while fetching appeals.',
+      error: error.message
+    });
+  }
+};
+
+/* =========================
+   UPDATE APPEAL STATUS (ADMIN)
+========================= */
+exports.updateAppealStatus = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { action, adminRemarks } = req.body;
+
+    const validActions = ['approve', 'reject'];
+    if (!validActions.includes(action)) {
+      await t.rollback();
+      return res.status(400).json({
+        message: `Invalid action. Must be one of: ${validActions.join(', ')}`
+      });
+    }
+
+    const complaint = await Complaint.findByPk(id);
+    if (!complaint) {
+      await t.rollback();
+      return res.status(404).json({ message: 'Complaint not found' });
+    }
+
+    if (complaint.currentStatus !== 'appealed') {
+      await t.rollback();
+      return res.status(400).json({
+        message: 'Only appealed complaints can have their appeal status updated'
+      });
+    }
+
+    if (action === 'approve') {
+      // Forward back to authority - set to pending for authority review
+      await complaint.update({
+        currentStatus: 'pending',
+        appealStatus: 'approved',
+        forwardedByAdmin: true,
+        adminRemarks: adminRemarks || 'Appeal approved by admin - re-investigation required',
+        statusNotes: `Admin approved appeal: ${adminRemarks || 'Re-investigation required'}`
+      }, { transaction: t });
+
+      await t.commit();
+      res.json({
+        success: true,
+        message: 'Appeal approved and forwarded to authority for review',
+        complaint
+      });
+    } else {
+      // Reject appeal - set back to rejected
+      await complaint.update({
+        currentStatus: 'rejected',
+        appealStatus: 'rejected',
+        adminRemarks: adminRemarks || 'Appeal rejected by admin',
+        statusNotes: `Admin rejected appeal: ${adminRemarks || 'No grounds for re-investigation'}`
+      }, { transaction: t });
+
+      await t.commit();
+      res.json({
+        success: true,
+        message: 'Appeal rejected',
+        complaint
+      });
+    }
+  } catch (error) {
+    await t.rollback();
+    console.error('Update Appeal Status Error:', error.message);
+    res.status(500).json({
+      message: 'Server error while updating appeal status.'
     });
   }
 };

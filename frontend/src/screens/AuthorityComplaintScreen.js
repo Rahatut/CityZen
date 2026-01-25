@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ScrollView, Image, Dimensions, Linking } from 'react-native';
-import { CheckCircle, XCircle, Clock, MapPin, ArrowLeft, ThumbsUp, Users, MapIcon } from 'lucide-react-native';
+import { CheckCircle, XCircle, Clock, MapPin, ArrowLeft, ThumbsUp, Users, MapIcon, ShieldCheck } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -11,13 +11,16 @@ export default function AuthorityComplaintsScreen({ darkMode }) {
       id: '1', title: 'Leaking Pipe', location: 'Dhanmondi 27', ward: 'Ward 15', 
       latitude: 23.7579, longitude: 90.3819,
       status: 'Pending', time: '1h ago', upvotes: 142, 
+      forwardedByAdmin: false,
       desc: 'Main water line burst near the main road. Significant flooding and low pressure in nearby buildings.',
       img: 'https://images.unsplash.com/photo-1542013936693-884638332954?auto=format&fit=crop&w=500' 
     },
     { 
       id: '2', title: 'Streetlight Out', location: 'Banani 11', ward: 'Ward 19', 
       latitude: 23.8103, longitude: 90.4129,
-      status: 'Accepted', time: '5h ago', upvotes: 38, 
+      status: 'Accepted', time: '5h ago', upvotes: 38,
+      forwardedByAdmin: true,
+      adminRemarks: 'Appeal approved - complaint requires re-investigation',
       desc: 'Three lamps in a row are non-functional. Area is pitch black at night, causing safety concerns.',
       img: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?auto=format&fit=crop&w=500' 
     },
@@ -87,6 +90,18 @@ export default function AuthorityComplaintsScreen({ darkMode }) {
              <Text style={styles.priorityText}>Community Priority: High ({selectedComplaint.upvotes} Citizens affected)</Text>
           </View>
 
+          {selectedComplaint.forwardedByAdmin && (
+            <View style={styles.adminBadge}>
+              <ShieldCheck size={18} color="#8B5CF6" />
+              <View style={{ marginLeft: 8, flex: 1 }}>
+                <Text style={styles.adminBadgeTitle}>Admin Priority - Re-investigation Required</Text>
+                {selectedComplaint.adminRemarks && (
+                  <Text style={styles.adminBadgeText}>{selectedComplaint.adminRemarks}</Text>
+                )}
+              </View>
+            </View>
+          )}
+
           <Text style={styles.sectionLabel}>Citizen Report</Text>
           <Text style={[styles.descText, darkMode && styles.textGray]}>{selectedComplaint.desc}</Text>
           
@@ -108,6 +123,13 @@ export default function AuthorityComplaintsScreen({ darkMode }) {
             <View style={styles.cardHeader}>
               <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status) }]} />
               <Text style={styles.statusText}>{item.status}</Text>
+              {/* ADMIN PRIORITY BADGE */}
+              {item.forwardedByAdmin && (
+                <View style={styles.adminPriorityBadge}>
+                  <ShieldCheck size={14} color="#8B5CF6" />
+                  <Text style={styles.adminPriorityText}>Admin</Text>
+                </View>
+              )}
               {/* UPVOTE BADGE ON CARD */}
               <View style={styles.cardUpvoteBadge}>
                 <ThumbsUp size={12} color="#1E88E5" />
@@ -139,6 +161,8 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
   statusText: { fontSize: 12, color: '#6B7280', flex: 1, fontWeight: 'bold' },
+  adminPriorityBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3E8FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, marginRight: 6 },
+  adminPriorityText: { fontSize: 11, color: '#8B5CF6', fontWeight: 'bold', marginLeft: 4 },
   cardUpvoteBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EBF5FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
   cardUpvoteText: { fontSize: 12, color: '#1E88E5', fontWeight: 'bold', marginLeft: 4 },
   complaintTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 6 },
@@ -173,6 +197,27 @@ const styles = StyleSheet.create({
   },
   priorityBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FDF4', padding: 12, borderRadius: 10, marginBottom: 20 },
   priorityText: { color: '#15803D', fontSize: 12, fontWeight: 'bold', marginLeft: 8 },
+  adminBadge: { 
+    flexDirection: 'row', 
+    alignItems: 'flex-start', 
+    backgroundColor: '#FAF5FF', 
+    padding: 14, 
+    borderRadius: 12, 
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#E9D5FF'
+  },
+  adminBadgeTitle: { 
+    color: '#7C3AED', 
+    fontSize: 14, 
+    fontWeight: 'bold',
+    marginBottom: 4
+  },
+  adminBadgeText: { 
+    color: '#6B21A8', 
+    fontSize: 12,
+    lineHeight: 18
+  },
   sectionLabel: { fontSize: 12, fontWeight: 'bold', color: '#9CA3AF', textTransform: 'uppercase', marginBottom: 8 },
   descText: { fontSize: 15, lineHeight: 22, color: '#4B5563' },
 

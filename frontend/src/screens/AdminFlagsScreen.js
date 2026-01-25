@@ -91,35 +91,106 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
   };
 
   // Data for Appeals (Formerly Fake Resolves)
-  const [appeals, setAppeals] = useState([
-    { id: 'a1', user: 'User 402', issue: 'Fake Resolution', dept: 'DWASA', ticket: 'REF-88', time: '10m ago', note: 'Technician never arrived but marked as fixed.' },
-    { id: 'a2', user: 'User 911', issue: 'Incomplete Fix', dept: 'City Corp', ticket: 'REF-22', time: '1h ago', note: 'Pothole still exists after resolve notice.' },
-  ]);
+  const [appeals, setAppeals] = useState([]);
+
+  // Fetch appeals from API
+  useEffect(() => {
+    if (subTab === 'appeals') {
+      fetchAppeals();
+    }
+  }, [subTab]);
+
+  const fetchAppeals = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching appeals from:', `${API_URL}/api/complaints/appeals`);
+      const response = await axios.get(`${API_URL}/api/complaints/appeals?status=pending`, {
+        headers: { 'bypass-tunnel-reminder': 'true' },
+        timeout: 10000,
+      });
+      console.log('Appeals response:', response.data);
+      if (response.data && response.data.appeals) {
+        const formattedAppeals = response.data.appeals.map(a => ({
+          id: a.id,
+          complaintId: a.id,
+          user: `Citizen ${a.citizenUid.slice(0, 6)}`,
+          title: a.title,
+          description: a.description,
+          appealReason: a.appealReason,
+          categoryName: a.Category?.name || 'Unknown',
+          time: formatTime(a.updatedAt),
+          currentStatus: a.currentStatus
+        }));
+        setAppeals(formattedAppeals);
+      }
+    } catch (error) {
+      console.error('Error fetching appeals:', error.message);
+      if (error.response) {
+        console.error('Response data:', error.response.data);
+        Alert.alert('Error', `Failed to load appeals: ${error.response.data?.message || 'Server error'}`);
+      } else if (error.request) {
+        console.error('No response received');
+        Alert.alert('Error', 'Backend server is not responding. Make sure it\'s running.');
+      } else {
+        Alert.alert('Error', 'Failed to load appeals');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // --- LOGIC FOR APPEALS ---
-  const handleAppealDecision = (item, type) => {
+  const handleAppealDecision = async (item, type) => {
     if (type === 'approve') {
       Alert.alert(
         "Approve Appeal", 
-        `Forward Ticket ${item.ticket} to ${item.dept} Authority for re-investigation?`, 
+        `Forward Complaint #${item.complaintId} back to authority for re-investigation?`, 
         [
           { text: "Cancel" },
-          { text: "Approve & Forward", onPress: () => {
-            setAppeals(appeals.filter(a => a.id !== item.id));
-            Alert.alert("Forwarded", `Case has been sent to ${item.dept} Management.`);
+          { text: "Approve & Forward", onPress: async () => {
+            try {
+              await axios.patch(
+                `${API_URL}/api/complaints/appeals/${item.complaintId}`,
+                {
+                  action: 'approve',
+                  adminRemarks: 'Appeal approved - complaint requires re-investigation'
+                },
+                { headers: { 'bypass-tunnel-reminder': 'true' } }
+              );
+              
+              setAppeals(appeals.filter(a => a.id !== item.id));
+              Alert.alert("Forwarded", `Complaint has been sent back to ${item.categoryName} authorities with admin priority flag.`);
+            } catch (error) {
+              console.error('Approve appeal error:', error);
+              Alert.alert('Error', 'Failed to approve appeal: ' + (error.response?.data?.message || error.message));
+            }
           }}
         ]
       );
     } else {
       Alert.prompt(
         "Reject Appeal", 
-        "Enter reason for rejection (sent to user):", 
+        "Enter reason for rejection (will be sent to citizen):", 
         [
           { text: "Cancel" },
-          { text: "Reject", style: "destructive", onPress: (reason) => {
+          { text: "Reject", style: "destructive", onPress: async (reason) => {
             if (!reason) return Alert.alert("Required", "Please provide a reason.");
-            setAppeals(appeals.filter(a => a.id !== item.id));
-            Alert.alert("Appeal Rejected", `User notified: ${reason}`);
+            try {
+              await axios.patch(
+                `${API_URL}/api/complaints/appeals/${item.complaintId}`,
+                {
+                  action: 'reject',
+                  adminRemarks: reason
+                },
+                { headers: { 'bypass-tunnel-reminder': 'true' } }
+              );
+              
+              setAppeals(appeals.filter(a => a.id !== item.id));
+              Alert.alert("Appeal Rejected", `Citizen will be notified: ${reason}`);
+            } catch (error) {
+              console.error('Reject appeal error:', error);
+              Alert.alert('Error', 'Failed to reject appeal: ' + (error.response?.data?.message || error.message));
+            }
           }}
         ]
       );
@@ -214,8 +285,13 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         <Text style={styles.user}>{item.user}</Text>
         <Text style={styles.time}><Clock size={10} color="#9CA3AF" /> {item.time}</Text>
       </View>
-      <Text style={[styles.mainText, darkMode && {color: 'white'}]}>{item.issue}: {item.dept}</Text>
-      <Text style={styles.subNote}>Ticket: {item.ticket} • "{item.note}"</Text>
+      <Text style={[styles.mainText, darkMode && {color: 'white'}]}>Complaint #{item.complaintId}: {item.title}</Text>
+      <Text style={styles.subNote}>Category: {item.categoryName}</Text>
+      <View style={[styles.reasonBadge, { backgroundColor: '#FEF3C7' }]}>
+        <AlertTriangle size={12} color="#F59E0B" />
+        <Text style={[styles.reasonText, { color: '#F59E0B' }]}>Appeal Reason</Text>
+      </View>
+      <Text style={[styles.subNote, { fontStyle: 'normal', color: darkMode ? '#D1D5DB' : '#374151', marginTop: 4 }]}>"{item.appealReason}"</Text>
       <View style={styles.actions}>
         <TouchableOpacity style={styles.btnSec} onPress={() => handleAppealDecision(item, 'reject')}>
           <XCircle size={16} color="#EF4444" />

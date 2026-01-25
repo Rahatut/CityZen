@@ -54,8 +54,16 @@ const Complaint = sequelize.define('Complaint', {
     allowNull: true
   },
   appealStatus: {
-    type: DataTypes.ENUM('none', 'pending', 'reviewed'),
+    type: DataTypes.ENUM('none', 'pending', 'approved', 'rejected'),
     defaultValue: 'none'
+  },
+  forwardedByAdmin: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  adminRemarks: {
+    type: DataTypes.TEXT,
+    allowNull: true
   }
 });
 
