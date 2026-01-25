@@ -22,7 +22,8 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
     description,
     setDescription,
     selectedCategory,
-    setAssignedAuthorities, // Destructure setAssignedAuthorities
+    setAssignedAuthorities,
+    resetState, // Destructure setAssignedAuthorities
   } = useComplaint();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
@@ -155,6 +156,7 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
           return authority ? authority.authorityName : 'Unknown Authority';
         });
         setAssignedAuthorities(assignedAuthorityNames);
+        resetState(); // Clear the complaint context after successful submission
 
         navigation.navigate('SubmittedComplaint');
       } else {

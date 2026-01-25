@@ -3,9 +3,7 @@ const { Op } = require('sequelize');
 const supabase = require('../config/supabase'); // Import Supabase client
 const axios = require('axios');
 
-/* =========================
-   CREATE COMPLAINT
-========================= */
+// CREATE COMPLAINT
 exports.createComplaint = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -107,9 +105,7 @@ exports.createComplaint = async (req, res) => {
   }
 };
 
-/* =========================
-   GET CATEGORIES
-========================= */
+// GET CATEGORIES
 exports.getCategories = async (req, res) => {
   try {
     const categories = await Category.findAll({
@@ -124,9 +120,7 @@ exports.getCategories = async (req, res) => {
   }
 };
 
-/* =========================
-   ADMIN KPI METRICS
-========================= */
+// ADMIN KPI METRICS
 exports.getAdminKpis = async (_req, res) => {
   try {
     // Basic counts
@@ -173,9 +167,7 @@ exports.getAdminKpis = async (_req, res) => {
   }
 };
 
-/* =========================
-   ADMIN KPI DETAILS (simple)
-========================= */
+// ADMIN KPI DETAILS (simple)
 exports.getAdminKpiDetails = async (_req, res) => {
   try {
     const total = await Complaint.count();
@@ -243,9 +235,7 @@ exports.getAdminKpiDetails = async (_req, res) => {
   }
 };
 
-/* =========================
-   ADMIN MODERATION OVERVIEW
-========================= */
+// ADMIN MODERATION OVERVIEW
 exports.getModerationOverview = async (_req, res) => {
   try {
     const [reportedTotal, reportedPending, appealsPending, appealsTotal] = await Promise.all([
@@ -267,9 +257,7 @@ exports.getModerationOverview = async (_req, res) => {
   }
 };
 
-/* =========================
-   CREATE CATEGORY
-========================= */
+// CREATE CATEGORY
 exports.createCategory = async (req, res) => {
   try {
     const name = req.body?.name?.trim();
@@ -296,9 +284,7 @@ exports.createCategory = async (req, res) => {
   }
 };
 
-/* =========================
-   DELETE CATEGORY (SAFE)
-========================= */
+// DELETE CATEGORY (SAFE)
 exports.deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
@@ -323,9 +309,7 @@ exports.deleteCategory = async (req, res) => {
   }
 };
 
-/* =========================
-   GET DEPARTMENTS
-========================= */
+// GET DEPARTMENTS
 exports.getDepartments = async (_req, res) => {
   try {
     const departments = await AuthorityCompany.findAll({
@@ -340,9 +324,7 @@ exports.getDepartments = async (_req, res) => {
   }
 };
 
-/* =========================
-   CREATE DEPARTMENT
-========================= */
+// CREATE DEPARTMENT
 exports.createDepartment = async (req, res) => {
   try {
     const name = req.body?.name?.trim();
@@ -369,9 +351,7 @@ exports.createDepartment = async (req, res) => {
   }
 };
 
-/* =========================
-   DELETE DEPARTMENT (SAFE)
-========================= */
+// DELETE DEPARTMENT (SAFE)
 exports.deleteDepartment = async (req, res) => {
   try {
     const { id } = req.params;
@@ -396,9 +376,7 @@ exports.deleteDepartment = async (req, res) => {
   }
 };
 
-/* =========================
-   GET ALL COMPLAINTS
-========================= */
+// GET ALL COMPLAINTS
 exports.getAllComplaints = async (req, res) => {
   try {
     const { status, categoryId, page = 1, limit = 10, citizenUid } = req.query;
@@ -501,9 +479,7 @@ exports.getAllComplaints = async (req, res) => {
   }
 };
 
-/* =========================
-   GET COMPLAINTS BY CITIZEN
-========================= */
+// GET COMPLAINTS BY CITIZEN
 exports.getComplaintsByCitizen = async (req, res) => {
   try {
     const { citizenUid } = req.params;
@@ -546,9 +522,7 @@ exports.getComplaintsByCitizen = async (req, res) => {
   }
 };
 
-/* =========================
-   GET COMPLAINT BY ID
-========================= */
+// GET COMPLAINT BY ID
 exports.getComplaintById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -625,9 +599,7 @@ exports.getComplaintById = async (req, res) => {
   }
 };
 
-/* =========================
-   UPDATE COMPLAINT STATUS
-========================= */
+// UPDATE COMPLAINT STATUS
 exports.updateComplaintStatus = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -713,9 +685,7 @@ exports.updateComplaintStatus = async (req, res) => {
   }
 };
 
-/* =========================
-   RATE COMPLAINT
-========================= */
+// RATE COMPLAINT
 exports.rateComplaint = async (req, res) => {
   try {
     const { id } = req.params;
@@ -745,9 +715,7 @@ exports.rateComplaint = async (req, res) => {
   }
 };
 
-/* =========================
-   APPEAL COMPLAINT
-========================= */
+// APPEAL COMPLAINT
 exports.appealComplaint = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -816,9 +784,7 @@ exports.appealComplaint = async (req, res) => {
   }
 };
 
-/* =========================
-   DELETE COMPLAINT
-========================= */
+// DELETE COMPLAINT
 exports.deleteComplaint = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -845,9 +811,7 @@ exports.deleteComplaint = async (req, res) => {
   }
 };
 
-/* =========================
-   RECOMMEND AUTHORITIES
-========================= */
+// RECOMMEND AUTHORITIES
 exports.getRecommendedAuthorities = async (req, res) => {
   try {
     const {
@@ -910,9 +874,7 @@ exports.getRecommendedAuthorities = async (req, res) => {
   }
 };
 
-/* =========================
-   UPVOTE COMPLAINT
-========================= */
+// UPVOTE COMPLAINT
 exports.upvoteComplaint = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -980,9 +942,7 @@ exports.upvoteComplaint = async (req, res) => {
   }
 };
 
-/* =========================
-   REPORT COMPLAINT
-========================= */
+// REPORT COMPLAINT
 exports.reportComplaint = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -1063,9 +1023,7 @@ exports.reportComplaint = async (req, res) => {
   }
 };
 
-/* =========================
- CHECK DUPLICATE COMPLAINTS
-========================= */
+// CHECK DUPLICATE COMPLAINTS
 exports.checkDuplicateComplaints = async (req, res) => {
   try {
     const { latitude, longitude, categoryId } = req.body;
@@ -1076,51 +1034,97 @@ exports.checkDuplicateComplaints = async (req, res) => {
       });
     }
 
-    const searchRadius = 100; // meters
+    // Configurable search radius (in meters)
+    const searchRadius = process.env.DUPLICATE_CHECK_RADIUS_METERS ? parseInt(process.env.DUPLICATE_CHECK_RADIUS_METERS) : 100;
+    const searchIntervalDays = 30; // days
 
     const query = `
       SELECT
-        id,
-        title,
-        description,
-        latitude,
-        longitude,
-        "citizenUid",
-        "categoryId",
-        "currentStatus",
+        c.id,
+        c.title,
+        c.description,
+        c.latitude,
+        c.longitude,
+        c."citizenUid",
+        c."categoryId",
+        c."currentStatus",
+        c.upvotes,
+        c."createdAt",
         (
           6371000 * acos(
-            cos(radians(:latitude)) * cos(radians(latitude))
-            * cos(radians(longitude) - radians(:longitude))
-            + sin(radians(:latitude)) * sin(radians(latitude))
+            cos(radians(:latitude)) * cos(radians(c.latitude))
+            * cos(radians(c.longitude) - radians(:longitude))
+            + sin(radians(:latitude)) * sin(radians(c.latitude))
           )
-        ) AS distance
-      FROM "Complaints"
-      WHERE "categoryId" = :categoryId
-        AND "createdAt" >= NOW() - INTERVAL '30 days'
+        ) AS distance,
+        (
+          SELECT "imageURL"
+          FROM "ComplaintImages"
+          WHERE "complaintId" = c.id
+          ORDER BY id
+          LIMIT 1
+        ) AS "imageUrl"
+      FROM "Complaints" AS c
+      WHERE c."categoryId" = :categoryId
+        AND c."createdAt" >= NOW() - INTERVAL '${searchIntervalDays} days'
         AND (
           6371000 * acos(
-            cos(radians(:latitude)) * cos(radians(latitude))
-            * cos(radians(longitude) - radians(:longitude))
-            + sin(radians(:latitude)) * sin(radians(latitude))
+            cos(radians(:latitude)) * cos(radians(c.latitude))
+            * cos(radians(c.longitude) - radians(:longitude))
+            + sin(radians(:latitude)) * sin(radians(c.latitude))
           )
         ) < :searchRadius
       ORDER BY distance;
     `;
 
-    const nearbyComplaints = await sequelize.query(query, {
+    let nearbyComplaints = await sequelize.query(query, {
       replacements: {
         latitude: Number(latitude),
         longitude: Number(longitude),
         categoryId: Number(categoryId),
         searchRadius,
+        searchIntervalDays,
       },
       type: sequelize.QueryTypes.SELECT,
     });
 
+    const bucketName = 'cityzen-media';
+
+    // Sign image URLs for accessibility
+    nearbyComplaints = await Promise.all(
+      nearbyComplaints.map(async (complaint) => {
+        if (complaint.imageUrl) {
+          try {
+            const url = complaint.imageUrl;
+            const parsed = new URL(url);
+            const path = parsed.pathname || '';
+            const marker = `/${bucketName}/`;
+            const idx = path.indexOf(marker);
+            const objectPath = idx >= 0 ? path.slice(idx + marker.length) : null;
+
+            if (objectPath) {
+              const { data, error } = await supabase.storage
+                .from(bucketName)
+                .createSignedUrl(objectPath, 60 * 60); // 1 hour
+              if (!error && data?.signedUrl) {
+                complaint.imageUrl = data.signedUrl;
+              }
+            }
+          } catch (e) {
+            console.error('Error signing image URL:', e);
+            // Keep original URL on failure
+          }
+        }
+        return complaint;
+      })
+    );
+
+
     return res.status(200).json({
       isDuplicate: nearbyComplaints.length > 0,
       complaints: nearbyComplaints,
+      searchRadius,
+      searchIntervalDays,
     });
 
   } catch (error) {
@@ -1131,9 +1135,7 @@ exports.checkDuplicateComplaints = async (req, res) => {
   }
 };
 
-/* =========================
-   GET REPORTED COMPLAINTS (ADMIN)
-========================= */
+// GET REPORTED COMPLAINTS (ADMIN)
 exports.getReportedComplaints = async (req, res) => {
   try {
     const { status } = req.query; // Optional filter by status (pending, reviewed, etc.)
@@ -1180,9 +1182,7 @@ exports.getReportedComplaints = async (req, res) => {
   }
 };
 
-/* =========================
-   UPDATE REPORT STATUS (ADMIN)
-========================= */
+// UPDATE REPORT STATUS (ADMIN)
 exports.updateReportStatus = async (req, res) => {
   try {
     const { id } = req.params;

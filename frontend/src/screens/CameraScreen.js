@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Alert } from 'react-native';
 import { Camera, Image as GalleryIcon, ArrowRight } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -8,9 +8,14 @@ export default function CameraScreen({ navigation }) {
     const {
         images,
         setImages,
+        resetState, // Destructure resetState
     } = useComplaint();
 
     const [imageUri, setImageUri] = useState(null); // Local for displaying preview
+
+    useEffect(() => {
+        resetState(); // Clear context on component mount
+    }, []);
 
     const handleNext = () => {
         if (images.length > 0) {
@@ -63,10 +68,10 @@ export default function CameraScreen({ navigation }) {
         if (!hasPermission) return;
 
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            mediaTypes: ImagePicker.MediaTypeOptions.All, // Restored as per user instruction
             allowsEditing: false,
             quality: 1,
-            allowsMultipleSelection: true, // Allow multiple selections
+            allowsMultipleSelection: true, 
             exif: true,
         });
 
