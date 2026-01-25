@@ -1,0 +1,27 @@
+{
+  "development": {
+    "username": "root",
+    "password": null,
+    "database": "cityzen",
+    "host": "localhost",
+    "dialect": "mysql",
+    "comment": "Configure DATABASE_URL in .env for Supabase PostgreSQL or use DATABASE_URL for local MySQL"
+  },
+  "test": {
+    "username": "root",
+    "password": null,
+    "database": "cityzen_test",
+    "host": "localhost",
+    "dialect": "mysql",
+    "comment": "Set DATABASE_URL environment variable for test database"
+  },
+  "production": {
+    "username": "root",
+    "password": null,
+    "database": "cityzen_prod",
+    "host": "localhost",
+    "dialect": "mysql",
+    "comment": "IMPORTANT: Use DATABASE_URL environment variable in production. Do not hardcode credentials."
+  }
+}
+

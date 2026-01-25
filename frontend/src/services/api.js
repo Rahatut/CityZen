@@ -1,10 +1,23 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+<<<<<<< Updated upstream
 // Configure base URL - change this to your computer's IP when testing on physical device
 const API_BASE_URL = __DEV__ 
   ? 'http://192.168.1.5:3000/api' // Replace with your local IP
   : 'https://your-production-url.com/api';
+=======
+// Configure base URL from environment variable
+// EXPO_PUBLIC_API_URL should be set in .env
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
+  ? `${process.env.EXPO_PUBLIC_API_URL}/api`
+  : (() => {
+      console.error('ERROR: EXPO_PUBLIC_API_URL is not set in environment variables');
+      return 'http://localhost:3000/api'; // Fallback for development
+    })();
+
+console.log('API_BASE_URL:', API_BASE_URL);
+>>>>>>> Stashed changes
 
 // Create axios instance
 const api = axios.create({
