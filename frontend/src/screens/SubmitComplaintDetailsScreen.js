@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Image, Alert } from 'react-native';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { useComplaint } from '../context/ComplaintContext';
+import { complaintAPI } from '../services/api';
 
 import { Camera, Image as ImageIcon, Sparkles, MapPin, Trash2, ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle, Shield } from 'lucide-react-native';
 import * as ImagePicker from "expo-image-picker";
+console.log("ImagePicker object structure:", ImagePicker);
 import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system';
 import axios from 'axios';
@@ -133,6 +135,39 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
       }, [generationKey]);
       
 
+    const hasDuplicateAlertBeenShown = useRef(false);
+
+    useEffect(() => {
+        console.log("Duplicate complaint check useEffect triggered.");
+        const checkDuplicate = async () => {
+            if (location && selectedCategory) {
+                try {
+                    const result = await complaintAPI.checkDuplicate(location.latitude, location.longitude, selectedCategory.id);
+                    if (result.isDuplicate) {
+                        if (hasDuplicateAlertBeenShown.current) return; // Use .current for ref
+
+                        console.log("Duplicate complaint found, showing alert.");
+                        const { searchRadius, searchIntervalDays } = result;
+                        Alert.alert(
+                            "Duplicate Complaint Found",
+                            `A similar complaint has already been reported in this area. Would you like to view it?`,
+                            [
+                                { text: "Cancel", style: "cancel" },
+                                { text: "Show", onPress: () => navigation.navigate('SimilarComplaints', { complaints: result.complaints }) }
+                            ]
+                        );
+                        hasDuplicateAlertBeenShown.current = true; // Use .current for ref
+                    }
+                } catch (error) {
+                    console.error("Error checking for duplicate complaints:", error);
+                }
+            }
+        };
+        checkDuplicate();
+    }, [location, selectedCategory]);
+
+
+
     useEffect(() => {
         const fetchCategories = async () => {
             try {
@@ -198,14 +233,17 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     }, [images]);      
 
 
+
     //Permissions
     const requestLocationPermission = async () => {
         const { status } = await Location.requestForegroundPermissionsAsync();
+        console.log("Location permission status:", status);
         return status === 'granted';
     };
 
     const requestCameraPermission = async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        console.log("Camera permission status:", status);
         if (status !== 'granted') {
             Alert.alert('Permission to access camera is required!');
             return false;
@@ -215,6 +253,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
 
     const requestLibraryPermission = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        console.log("Media Library permission status:", status);
         if (status !== 'granted') {
             Alert.alert('Permission to access media library is required!');
             return false;
@@ -320,16 +359,29 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     };
 
     const handleImagePick = async () => {
+        console.log("handleImagePick called");
         const hasPermission = await requestCameraPermission();
         const locPerm = await requestLocationPermission();
-        if (!locPerm || !hasPermission) return;
+        if (!locPerm || !hasPermission) {
+            console.log("Permissions denied for ImagePick");
+            return;
+        }
+        console.log("Permissions granted for ImagePick, launching camera...");
+        let result;
+        try {
+            result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                allowsEditing: false,
+                quality: 1,
+                exif: true,
+            });
+            console.log("ImagePicker.launchCameraAsync result:", result);
+        } catch (error) {
+            console.error("Error launching camera:", error);
+            Alert.alert("Camera Error", `Failed to launch camera: ${error.message}`);
+            return;
+        }
 
-        const result = await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaType.All,
-            allowsEditing: false,
-            quality: 1,
-            exif: true,
-        });
 
         if (result.assets?.length > 0) {
             const asset = result.assets[0];
@@ -348,17 +400,30 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     };
 
     const handleLibraryPick = async () => {
+        console.log("handleLibraryPick called");
         const hasPermission = await requestLibraryPermission();
         const locPerm = await requestLocationPermission();
-        if (!locPerm || !hasPermission) return;
+        if (!locPerm || !hasPermission) {
+            console.log("Permissions denied for LibraryPick");
+            return;
+        }
+        console.log("Permissions granted for LibraryPick, launching image library...");
+        let result;
+        try {
+            result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.All,
+                allowsEditing: false,
+                quality: 1,
+                allowsMultipleSelection: true, // Allow multiple selections
+                exif: true,
+            });
+            console.log("ImagePicker.launchImageLibraryAsync result:", result);
+        } catch (error) {
+            console.error("Error launching image library:", error);
+            Alert.alert("Gallery Error", `Failed to launch gallery: ${error.message}`);
+            return;
+        }
 
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaType.All,
-            allowsEditing: false,
-            quality: 1,
-            allowsMultipleSelection: true, // Allow multiple selections
-            exif: true,
-        });
 
         if (result.assets?.length > 0) {
             const asset = result.assets[0];

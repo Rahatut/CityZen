@@ -3,6 +3,8 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Activi
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { useComplaint } from '../context/ComplaintContext';
+import { useNotification } from '../context/NotificationContext';
+import { complaintAPI } from '../services/api';
 import axios from 'axios';
 import { auth } from '../config/firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,7 +22,8 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
     description,
     setDescription,
     selectedCategory,
-    setAssignedAuthorities, // Destructure setAssignedAuthorities
+    setAssignedAuthorities,
+    resetState, // Destructure setAssignedAuthorities
   } = useComplaint();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
@@ -158,6 +161,7 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
           return authority ? authority.name : 'Unknown Authority';
         });
         setAssignedAuthorities(assignedAuthorityNames);
+        resetState(); // Clear the complaint context after successful submission
 
         navigation.navigate('SubmittedComplaint');
       } else {
