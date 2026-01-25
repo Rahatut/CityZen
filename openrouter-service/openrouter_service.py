@@ -1,8 +1,9 @@
 import os
 import uvicorn
 import json
+import base64
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -22,29 +23,29 @@ client = OpenAI(
 
 app = FastAPI()
 
-def extract_json_from_response(text):
-    """Extracts a JSON object or array from a string, even if it's embedded in other text."""
-    try:
-        # Try to find array first
-        start_index = text.find('[')
-        end_index = text.rfind(']')
+# -------------------- Utilities --------------------
 
-        if start_index != -1 and end_index != -1 and start_index < end_index:
-            json_string = text[start_index:end_index+1]
-            return json.loads(json_string)
-        else:
-            # Fallback to object if no array found
-            start_index = text.find('{')
-            end_index = text.rfind('}')
-            if start_index != -1 and end_index != -1 and start_index < end_index:
-                json_string = text[start_index:end_index+1]
-                return json.loads(json_string)
-            else:
-                return None
+def extract_json_from_response(text: str):
+    """Extract JSON object or array from LLM output."""
+    try:
+        # Prefer object
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and start < end:
+            return json.loads(text[start:end + 1])
+
+        # Fallback to array
+        start = text.find("[")
+        end = text.rfind("]")
+        if start != -1 and end != -1 and start < end:
+            return json.loads(text[start:end + 1])
+
+        return None
     except json.JSONDecodeError:
         return None
 
-# Pydantic model for request body
+# -------------------- Models --------------------
+
 class Prompt(BaseModel):
     prompt: str
 
@@ -66,6 +67,91 @@ class GenerateComplaintTextRequest(BaseModel):
     longitude: float
     location_string: Optional[str] = None
 
+# -------------------- Vision Detection (LLM) --------------------
+
+@app.post("/detect_with_llm")
+async def detect_with_llm(image: UploadFile = File(...)):
+    try:
+        # ---- Validation ----
+        if not image.content_type.startswith("image/"):
+            raise HTTPException(status_code=400, detail="File must be an image")
+
+        image_bytes = await image.read()
+        if len(image_bytes) > 5 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+
+        image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        prompt = """
+You are a civic issue detection AI for Dhaka city.
+
+Analyze the image and identify the SINGLE most relevant issue.
+
+Allowed categories:
+- Pothole
+- Open Manhole
+- Waterlogging
+- Garbage
+- Broken Road
+- No Issue
+
+Rules:
+- Return ONLY valid JSON
+- Pick exactly ONE category from the list
+- Confidence must be a number between 0 and 100
+- If unsure or image is unclear, return:
+  { "label": "No Issue", "confidence": 40 }
+
+Output JSON schema:
+{
+  "label": "string",
+  "confidence": number
+}
+"""
+
+        response = client.chat.completions.create(
+            model="openai/gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
+                        }
+                    ]
+                }
+            ]
+        )
+
+        content = response.choices[0].message.content
+        parsed = extract_json_from_response(content)
+
+        if not parsed or "label" not in parsed:
+            raise ValueError("Invalid JSON from vision model")
+
+        # ---- Normalize confidence ----
+        confidence = parsed.get("confidence", 0)
+        try:
+            confidence = int(float(confidence))
+        except Exception:
+            confidence = 0
+
+        confidence = max(0, min(100, confidence))
+
+        return {
+            "label": parsed["label"],
+            "confidence": confidence
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# -------------------- Text Generation --------------------
+
 @app.post("/generate")
 async def generate_text(request: Prompt):
     """
@@ -79,6 +165,8 @@ async def generate_text(request: Prompt):
         return {"text": response.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# -------------------- Complaint Text --------------------
 
 @app.post("/generate_complaint_text")
 async def generate_complaint_text(request: GenerateComplaintTextRequest):
@@ -111,7 +199,7 @@ async def generate_complaint_text(request: GenerateComplaintTextRequest):
         print("-----GENERATE COMPLAINT TEXT PROMPT-----")
         print(prompt)
         response = client.chat.completions.create(
-            model="meta-llama/llama-3-8b-instruct",
+            model="openai/gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
         print("-----GENERATE COMPLAINT TEXT RESPONSE-----")

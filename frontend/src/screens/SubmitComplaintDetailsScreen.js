@@ -52,6 +52,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState({});
     const lastGenerationKeyRef = React.useRef(null);
+    const activeDetections = React.useRef(0);
 
     const generationKey = aiResult && location
     ? JSON.stringify({
@@ -160,9 +161,15 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         // Decide what to search in categories based on AI label
         if (aiResult.label.toLowerCase() === "pothole") {
             searchString = "road";
-        } else if (aiResult.label.toLowerCase() === "open_manhole") {
+        } else if (aiResult.label.toLowerCase() === "open manhole") {
             searchString = "road";
-        }
+        } else if (aiResult.label.toLowerCase() === "waterlogging") {
+            searchString = "water";
+        } else if (aiResult.label.toLowerCase() === "garbage") {
+            searchString = "garbage";
+        } else if (aiResult.label.toLowerCase() === "broken road") {
+            searchString = "road";
+        } 
 
         if (searchString) {
             const matchedCategory = categories.find(cat =>
@@ -290,10 +297,14 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         });
 
         try {
-            const res = await fetch(`${process.env.EXPO_PUBLIC_AI_SERVICE_URL}/detect`, {
+            const res = await fetch(`${process.env.EXPO_PUBLIC_AI_SERVICE_URL}/detect_with_llm`, {
                 method: "POST",
                 body: formData,
             });
+
+            if (!res.ok) {
+                throw new Error("AI service error");
+            }
 
             const data = await res.json();
             return data;
