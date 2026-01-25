@@ -37,6 +37,12 @@ router.get('/complaints/reports', complaintController.getReportedComplaints);
 // Update report status (Admin)
 router.patch('/complaints/reports/:id', complaintController.updateReportStatus);
 
+// Get appeals (Admin)
+router.get('/complaints/appeals', complaintController.getAppeals);
+
+// Update appeal status (Admin)
+router.patch('/complaints/appeals/:id', complaintController.updateAppealStatus);
+
 // Get complaint by ID
 router.get('/complaints/:id', complaintController.getComplaintById);
 
