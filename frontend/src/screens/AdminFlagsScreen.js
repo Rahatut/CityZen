@@ -34,6 +34,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         const formattedReports = response.data.reports.map(r => ({
           id: r.id,
           complaintId: r.complaintId,
+          citizenUid: r.Complaint?.citizenUid || 'unknown',
           user: `User ${r.reportedBy.slice(0, 6)}`,
           reason: formatReason(r.reason),
           target: `Complaint #${r.complaintId}`,
@@ -90,11 +91,43 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
     return `${diffDays}d ago`;
   };
 
+  // Get user moderation info (strikes, ban status)
+  const getUserModerationInfo = async (citizenUid) => {
+    // Check cache first
+    if (userModerationCache[citizenUid]) {
+      return userModerationCache[citizenUid];
+    }
+
+    try {
+      const response = await axios.get(`${API_URL}/api/moderation/user/${citizenUid}`, {
+        headers: { 'bypass-tunnel-reminder': 'true' },
+        timeout: 5000,
+      });
+      
+      const info = {
+        strikes: response.data.strikes || 0,
+        isBanned: response.data.isBanned || false,
+        bannedAt: response.data.bannedAt,
+        banReason: response.data.banReason
+      };
+      
+      // Update cache
+      setUserModerationCache(prev => ({ ...prev, [citizenUid]: info }));
+      return info;
+    } catch (error) {
+      console.error('Error fetching user moderation info:', error.message);
+      return { strikes: 0, isBanned: false };
+    }
+  };
+
   // Data for Appeals (Formerly Fake Resolves)
   const [appeals, setAppeals] = useState([]);
   
   // Data for Forwarded Appeals (tracking approved appeals)
   const [forwardedAppeals, setForwardedAppeals] = useState([]);
+  
+  // User moderation info cache (uid -> {strikes, isBanned})
+  const [userModerationCache, setUserModerationCache] = useState({});
 
   // Fetch appeals from API
   useEffect(() => {
@@ -118,6 +151,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         const formattedAppeals = response.data.appeals.map(a => ({
           id: a.id,
           complaintId: a.id,
+          citizenUid: a.citizenUid,
           user: `Citizen ${a.citizenUid.slice(0, 6)}`,
           title: a.title,
           description: a.description,
@@ -182,6 +216,53 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
     }
   };
 
+  // Ban a user permanently
+  const banUser = async (citizenUid, strikeCount) => {
+    try {
+      await axios.post(`${API_URL}/api/moderation/ban`, {
+        citizenUid,
+        reason: `Accumulated ${strikeCount} strikes for policy violations`
+      }, {
+        headers: { 'bypass-tunnel-reminder': 'true' },
+      });
+      
+      // Clear cache
+      setUserModerationCache(prev => {
+        const newCache = { ...prev };
+        delete newCache[citizenUid];
+        return newCache;
+      });
+      
+      Alert.alert("User Banned", "The user has been permanently banned from the platform.");
+    } catch (error) {
+      console.error('Ban error:', error);
+      Alert.alert('Error', 'Failed to ban user: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  // Unban a user
+  const unbanUser = async (citizenUid) => {
+    try {
+      await axios.post(`${API_URL}/api/moderation/unban`, {
+        citizenUid
+      }, {
+        headers: { 'bypass-tunnel-reminder': 'true' },
+      });
+      
+      // Clear cache
+      setUserModerationCache(prev => {
+        const newCache = { ...prev };
+        delete newCache[citizenUid];
+        return newCache;
+      });
+      
+      Alert.alert("User Unbanned", "The user has been unbanned and can now access the platform.");
+    } catch (error) {
+      console.error('Unban error:', error);
+      Alert.alert('Error', 'Failed to unban user: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
   // --- LOGIC FOR APPEALS ---
   const handleAppealDecision = async (item, type) => {
     if (type === 'approve') {
@@ -211,39 +292,108 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         ]
       );
     } else if (type === 'reject') {
+      // Get user info first
+      const citizenUid = item.citizenUid;
+      const userInfo = await getUserModerationInfo(citizenUid);
+      const futureStrikes = userInfo.strikes + 1;
+      
       Alert.alert(
-        "Reject Appeal", 
-        "This will reject the citizen's appeal and keep the complaint status as rejected.",
-        [
-          { text: "Cancel" },
-          { text: "Reject Appeal", style: "destructive", onPress: async () => {
-            try {
-              await axios.patch(
-                `${API_URL}/api/complaints/appeals/${item.complaintId}`,
-                {
-                  action: 'reject',
-                  adminRemarks: 'Appeal rejected by admin - original decision upheld'
-                },
-                { headers: { 'bypass-tunnel-reminder': 'true' } }
-              );
-              
-              setAppeals(appeals.filter(a => a.id !== item.id));
-              Alert.alert("Appeal Rejected", "The citizen's appeal has been rejected. Original decision stands.");
-            } catch (error) {
-              console.error('Reject appeal error:', error);
-              Alert.alert('Error', 'Failed to reject appeal: ' + (error.response?.data?.message || error.message));
-            }
-          }}
-        ]
-      );
-    } else if (type === 'delete') {
-      Alert.alert(
-        "Delete Appealed Complaint?",
-        `This will permanently remove Complaint #${item.complaintId}. This action cannot be undone.`,
+        "Reject Appeal & Add Strike?", 
+        `This will reject the appeal and the complaint stays rejected.\\n\\n${item.user} currently has ${userInfo.strikes} strike(s).\\n\\nDo you want to add a strike for inappropriate appeal?`,
         [
           { text: "Cancel" },
           { 
-            text: "Delete Complaint", 
+            text: "Reject Only", 
+            onPress: async () => {
+              try {
+                await axios.patch(
+                  `${API_URL}/api/complaints/appeals/${item.complaintId}`,
+                  {
+                    action: 'reject',
+                    adminRemarks: 'Appeal rejected by admin - original decision upheld'
+                  },
+                  { headers: { 'bypass-tunnel-reminder': 'true' } }
+                );
+                
+                setAppeals(appeals.filter(a => a.id !== item.id));
+                Alert.alert("Appeal Rejected", "The citizen's appeal has been rejected. Original decision stands.");
+              } catch (error) {
+                console.error('Reject appeal error:', error);
+                Alert.alert('Error', 'Failed to reject appeal: ' + (error.response?.data?.message || error.message));
+              }
+            }
+          },
+          { 
+            text: "Reject & Strike", 
+            style: "destructive", 
+            onPress: async () => {
+              try {
+                // Reject the appeal
+                await axios.patch(
+                  `${API_URL}/api/complaints/appeals/${item.complaintId}`,
+                  {
+                    action: 'reject',
+                    adminRemarks: 'Appeal rejected by admin - inappropriate appeal, strike issued'
+                  },
+                  { headers: { 'bypass-tunnel-reminder': 'true' } }
+                );
+                
+                // Add strike to user
+                const strikeResponse = await axios.post(`${API_URL}/api/moderation/strike`, {
+                  citizenUid: citizenUid,
+                  reason: `Inappropriate appeal rejected for Complaint #${item.complaintId}`,
+                  complaintId: item.complaintId
+                }, {
+                  headers: { 'bypass-tunnel-reminder': 'true' },
+                });
+                
+                // Clear cache
+                setUserModerationCache(prev => {
+                  const newCache = { ...prev };
+                  delete newCache[citizenUid];
+                  return newCache;
+                });
+                
+                setAppeals(appeals.filter(a => a.id !== item.id));
+                
+                // Check if should ban
+                if (strikeResponse.data.shouldBan && !strikeResponse.data.isBanned) {
+                  Alert.alert(
+                    "Ban User?",
+                    `${item.user} now has ${strikeResponse.data.strikes} strikes.\\n\\nDo you want to ban this user permanently?`,
+                    [
+                      { text: "Not Now" },
+                      { 
+                        text: "Ban User", 
+                        style: "destructive",
+                        onPress: () => banUser(citizenUid, strikeResponse.data.strikes)
+                      }
+                    ]
+                  );
+                } else {
+                  Alert.alert("Appeal Rejected", `Appeal rejected and strike added. ${item.user} now has ${strikeResponse.data.strikes} strike(s).`);
+                }
+              } catch (error) {
+                console.error('Reject appeal error:', error);
+                Alert.alert('Error', 'Failed to reject appeal: ' + (error.response?.data?.message || error.message));
+              }
+            }
+          }
+        ]
+      );
+    } else if (type === 'delete') {
+      // Get citizenUid from the item
+      const citizenUid = item.citizenUid;
+      const userInfo = await getUserModerationInfo(citizenUid);
+      const futureStrikes = userInfo.strikes + 1;
+      
+      Alert.alert(
+        "Delete Appeal & Add Strike?",
+        `This will permanently remove Complaint #${item.complaintId}.\\n\\nUser currently has ${userInfo.strikes} strike(s).\\nAfter this action: ${futureStrikes} strike(s)${futureStrikes >= 5 ? '\\n⚠️ User will reach ban threshold!' : ''}`,
+        [
+          { text: "Cancel" },
+          { 
+            text: "Delete & Strike", 
             style: "destructive", 
             onPress: async () => {
               try {
@@ -253,9 +403,42 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                   headers: { 'bypass-tunnel-reminder': 'true' },
                 });
                 
+                // Add strike to user
+                const strikeResponse = await axios.post(`${API_URL}/api/moderation/strike`, {
+                  citizenUid: citizenUid,
+                  reason: `Inappropriate appeal deleted`,
+                  complaintId: item.complaintId
+                }, {
+                  headers: { 'bypass-tunnel-reminder': 'true' },
+                });
+                
+                // Clear cache
+                setUserModerationCache(prev => {
+                  const newCache = { ...prev };
+                  delete newCache[citizenUid];
+                  return newCache;
+                });
+                
                 // Remove from local state
                 setAppeals(appeals.filter(a => a.id !== item.id));
-                Alert.alert("Deleted", "The complaint has been permanently deleted.");
+                
+                // Check if should ban
+                if (strikeResponse.data.shouldBan && !strikeResponse.data.isBanned) {
+                  Alert.alert(
+                    "Ban User?",
+                    `User now has ${strikeResponse.data.strikes} strikes.\\n\\nDo you want to ban this user permanently?`,
+                    [
+                      { text: "Not Now" },
+                      { 
+                        text: "Ban User", 
+                        style: "destructive",
+                        onPress: () => banUser(citizenUid, strikeResponse.data.strikes)
+                      }
+                    ]
+                  );
+                } else {
+                  Alert.alert("Deleted", `The complaint has been deleted. User now has ${strikeResponse.data.strikes} strike(s).`);
+                }
               } catch (error) {
                 console.error('Delete appeal error:', error);
                 Alert.alert('Error', 'Failed to delete complaint: ' + (error.response?.data?.message || error.message));
@@ -270,9 +453,13 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
   // --- LOGIC FOR REPORTS ---
   const handleReportAction = async (item, action) => {
     if (action === 'delete') {
+      // Get user info first
+      const userInfo = await getUserModerationInfo(item.citizenUid);
+      const futureStrikes = userInfo.strikes + 1;
+      
       Alert.alert(
-        "Delete Post?",
-        `This will permanently remove the complaint. ${item.user} will receive 1 strike.`,
+        "Delete Post & Add Strike?",
+        `This will permanently remove the complaint.\\n\\n${item.user} currently has ${userInfo.strikes} strike(s).\\nAfter this action: ${futureStrikes} strike(s)${futureStrikes >= 5 ? '\\n⚠️ User will reach ban threshold!' : ''}`,
         [
           { text: "Cancel" },
           { 
@@ -282,13 +469,46 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
               try {
                 // Delete the complaint from backend
                 await axios.delete(`${API_URL}/api/complaints/${item.complaintId}`, {
-                  data: { citizenUid: 'admin' }, // Admin override
+                  data: { citizenUid: 'admin' },
                   headers: { 'bypass-tunnel-reminder': 'true' },
+                });
+                
+                // Add strike to user
+                const strikeResponse = await axios.post(`${API_URL}/api/moderation/strike`, {
+                  citizenUid: item.citizenUid,
+                  reason: `Reported complaint deleted: ${item.reason}`,
+                  complaintId: item.complaintId
+                }, {
+                  headers: { 'bypass-tunnel-reminder': 'true' },
+                });
+                
+                // Clear cache for this user
+                setUserModerationCache(prev => {
+                  const newCache = { ...prev };
+                  delete newCache[item.citizenUid];
+                  return newCache;
                 });
                 
                 // Remove from local state
                 setReports(reports.filter(r => r.id !== item.id));
-                Alert.alert("Action Taken", `Complaint deleted. ${item.user} strike count increased.`);
+                
+                // Check if should ban
+                if (strikeResponse.data.shouldBan && !strikeResponse.data.isBanned) {
+                  Alert.alert(
+                    "Ban User?",
+                    `${item.user} now has ${strikeResponse.data.strikes} strikes.\\n\\nDo you want to ban this user permanently?`,
+                    [
+                      { text: "Not Now" },
+                      { 
+                        text: "Ban User", 
+                        style: "destructive",
+                        onPress: () => banUser(item.citizenUid, strikeResponse.data.strikes)
+                      }
+                    ]
+                  );
+                } else {
+                  Alert.alert("Action Taken", `Complaint deleted. ${item.user} now has ${strikeResponse.data.strikes} strike(s).`);
+                }
               } catch (error) {
                 console.error('Delete error:', error);
                 Alert.alert('Error', 'Failed to delete complaint: ' + (error.response?.data?.message || error.message));

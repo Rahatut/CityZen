@@ -1,4 +1,4 @@
-const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, Upvote, ComplaintReport, sequelize } = require('../models');
+const { Complaint, Category, ComplaintImages, AuthorityCompany, ComplaintAssignment, Upvote, ComplaintReport, sequelize, User, Citizen } = require('../models');
 const { Op } = require('sequelize');
 const supabase = require('../config/supabase'); // Import Supabase client
 const axios = require('axios');
@@ -30,6 +30,20 @@ exports.createComplaint = async (req, res) => {
       return res
         .status(400)
         .json({ message: 'Missing required complaint fields or image data.' });
+    }
+
+    // Check if user is banned
+    const user = await User.findByPk(citizenUid, {
+      include: [{ model: Citizen }]
+    });
+
+    if (user && user.Citizen && user.Citizen.isBanned) {
+      return res.status(403).json({ 
+        message: 'Your account has been banned. You cannot submit complaints.',
+        banned: true,
+        banReason: user.Citizen.banReason,
+        strikes: user.Citizen.strikes
+      });
     }
 
     const complaint = await Complaint.create(
@@ -1360,9 +1374,9 @@ exports.updateAppealStatus = async (req, res) => {
     }
 
     if (action === 'approve') {
-      // Forward back to authority - set to pending for authority review
+      // Forward back to authority - keep status as appealed until authority accepts
       await complaint.update({
-        currentStatus: 'pending',
+        currentStatus: 'appealed',
         appealStatus: 'approved',
         forwardedByAdmin: true,
         adminRemarks: adminRemarks || 'Appeal approved by admin - re-investigation required',
