@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { ShieldCheck, LogOut, Key, History, Mail, Clock } from 'lucide-react-native';
+import { ShieldCheck, LogOut, Key, History, Mail, Clock, Bell } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import { useAdminNotification } from '../context/NotificationContext';
 
 export default function AdminProfileScreen({ darkMode, onLogout }) {
   const [adminData, setAdminData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastLogin, setLastLogin] = useState(null);
+  const { testAdminNotification } = useAdminNotification();
 
   useEffect(() => {
     fetchAdminProfile();
@@ -98,6 +100,21 @@ export default function AdminProfileScreen({ darkMode, onLogout }) {
           darkMode={darkMode} 
         />
       </View>
+      
+      {/* Test Notification Button */}
+      <TouchableOpacity 
+        style={[styles.testBtn, darkMode && styles.testBtnDark]} 
+        onPress={() => {
+          console.log('Test button pressed');
+          testAdminNotification();
+        }}
+      >
+        <Bell size={20} color="#1E88E5" />
+        <Text style={[styles.testBtnText, darkMode && styles.testBtnTextDark]}>
+          Test Admin Notification
+        </Text>
+      </TouchableOpacity>
+      
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <LogOut size={20} color="white" /><Text style={styles.logoutText}>Terminate Session</Text>
       </TouchableOpacity>
@@ -129,6 +146,30 @@ const styles = StyleSheet.create({
   infoLab: { fontSize: 10, color: '#9CA3AF' },
   infoVal: { fontSize: 14, fontWeight: '600' },
   ellipsisText: { maxWidth: '90%' },
+  testBtn: { 
+    backgroundColor: '#EFF6FF', 
+    flexDirection: 'row', 
+    padding: 16, 
+    borderRadius: 15, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginTop: 20,
+    borderWidth: 2,
+    borderColor: '#1E88E5',
+  },
+  testBtnDark: {
+    backgroundColor: '#1F2937',
+    borderColor: '#3B82F6',
+  },
+  testBtnText: { 
+    color: '#1E88E5', 
+    fontSize: 14, 
+    fontWeight: 'bold', 
+    marginLeft: 10 
+  },
+  testBtnTextDark: {
+    color: '#3B82F6',
+  },
   logoutBtn: { backgroundColor: '#EF4444', flexDirection: 'row', padding: 18, borderRadius: 15, justifyContent: 'center', alignItems: 'center', marginTop: 30, marginBottom: 30 },
   logoutText: { color: 'white', fontWeight: 'bold', marginLeft: 10 }
 });

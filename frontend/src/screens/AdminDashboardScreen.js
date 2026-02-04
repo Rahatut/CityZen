@@ -11,9 +11,20 @@ import AdminFlagsScreen from './AdminFlagsScreen';
 import AdminSystemScreen from './AdminSystemScreen';
 import AdminProfileScreen from './AdminProfileScreen';
 
-export default function AdminDashboardScreen({ onLogout, darkMode, toggleDarkMode }) {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [initialFlagTab, setInitialFlagTab] = useState('reported');
+export default function AdminDashboardScreen({ route, navigation, onLogout, darkMode, toggleDarkMode }) {
+  const params = route?.params || {};
+  const [activeTab, setActiveTab] = useState(params.initialTab || 'overview');
+  const [initialFlagTab, setInitialFlagTab] = useState(params.flagTab || 'reported');
+
+  // Update tab when params change
+  useEffect(() => {
+    if (params.initialTab) {
+      setActiveTab(params.initialTab);
+    }
+    if (params.flagTab) {
+      setInitialFlagTab(params.flagTab);
+    }
+  }, [params.initialTab, params.flagTab]);
 
   // Logic to jump from Status Screen to a specific Flag Tab
   const jumpToFlags = (subTab) => {
@@ -50,7 +61,7 @@ export default function AdminDashboardScreen({ onLogout, darkMode, toggleDarkMod
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
       {/* Top Header (Same as Citizen Space) */}
-      <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
       
       <View style={styles.mainContent}>
         {renderContent()}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import { Clock, XCircle, Send, Trash2, AlertTriangle } from 'lucide-react-native';
+import { Clock, XCircle, Send, Trash2, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react-native';
 import axios from 'axios';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -92,11 +92,16 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
 
   // Data for Appeals (Formerly Fake Resolves)
   const [appeals, setAppeals] = useState([]);
+  
+  // Data for Forwarded Appeals (tracking approved appeals)
+  const [forwardedAppeals, setForwardedAppeals] = useState([]);
 
   // Fetch appeals from API
   useEffect(() => {
     if (subTab === 'appeals') {
       fetchAppeals();
+    } else if (subTab === 'forwarded') {
+      fetchForwardedAppeals();
     }
   }, [subTab]);
 
@@ -139,6 +144,44 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
     }
   };
 
+  // Fetch forwarded appeals (approved appeals sent back to authorities)
+  const fetchForwardedAppeals = async () => {
+    try {
+      setLoading(true);
+      console.log('Fetching forwarded appeals...');
+      // Fetch all complaints that were forwarded by admin
+      const response = await axios.get(`${API_URL}/api/complaints?limit=100`, {
+        headers: { 'bypass-tunnel-reminder': 'true' },
+        timeout: 10000,
+      });
+      
+      if (response.data && response.data.complaints) {
+        // Filter for complaints that were forwarded by admin
+        const forwarded = response.data.complaints
+          .filter(c => c.forwardedByAdmin === true && c.appealStatus === 'approved')
+          .map(c => ({
+            id: c.id,
+            complaintId: c.id,
+            title: c.title,
+            categoryName: c.Category?.name || 'Unknown',
+            currentStatus: c.currentStatus,
+            adminRemarks: c.adminRemarks,
+            statusNotes: c.statusNotes,
+            time: formatTime(c.updatedAt),
+            forwardedAt: formatTime(c.updatedAt),
+            user: `Citizen ${c.citizenUid?.slice(0, 6)}` || 'Unknown'
+          }));
+        console.log('Forwarded appeals found:', forwarded.length);
+        setForwardedAppeals(forwarded);
+      }
+    } catch (error) {
+      console.error('Error fetching forwarded appeals:', error.message);
+      Alert.alert('Error', 'Failed to load forwarded appeals');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // --- LOGIC FOR APPEALS ---
   const handleAppealDecision = async (item, type) => {
     if (type === 'approve') {
@@ -167,31 +210,58 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
           }}
         ]
       );
-    } else {
-      Alert.prompt(
+    } else if (type === 'reject') {
+      Alert.alert(
         "Reject Appeal", 
-        "Enter reason for rejection (will be sent to citizen):", 
+        "This will reject the citizen's appeal and keep the complaint status as rejected.",
         [
           { text: "Cancel" },
-          { text: "Reject", style: "destructive", onPress: async (reason) => {
-            if (!reason) return Alert.alert("Required", "Please provide a reason.");
+          { text: "Reject Appeal", style: "destructive", onPress: async () => {
             try {
               await axios.patch(
                 `${API_URL}/api/complaints/appeals/${item.complaintId}`,
                 {
                   action: 'reject',
-                  adminRemarks: reason
+                  adminRemarks: 'Appeal rejected by admin - original decision upheld'
                 },
                 { headers: { 'bypass-tunnel-reminder': 'true' } }
               );
               
               setAppeals(appeals.filter(a => a.id !== item.id));
-              Alert.alert("Appeal Rejected", `Citizen will be notified: ${reason}`);
+              Alert.alert("Appeal Rejected", "The citizen's appeal has been rejected. Original decision stands.");
             } catch (error) {
               console.error('Reject appeal error:', error);
               Alert.alert('Error', 'Failed to reject appeal: ' + (error.response?.data?.message || error.message));
             }
           }}
+        ]
+      );
+    } else if (type === 'delete') {
+      Alert.alert(
+        "Delete Appealed Complaint?",
+        `This will permanently remove Complaint #${item.complaintId}. This action cannot be undone.`,
+        [
+          { text: "Cancel" },
+          { 
+            text: "Delete Complaint", 
+            style: "destructive", 
+            onPress: async () => {
+              try {
+                // Delete the complaint from backend
+                await axios.delete(`${API_URL}/api/complaints/${item.complaintId}`, {
+                  data: { citizenUid: 'admin' }, // Admin override
+                  headers: { 'bypass-tunnel-reminder': 'true' },
+                });
+                
+                // Remove from local state
+                setAppeals(appeals.filter(a => a.id !== item.id));
+                Alert.alert("Deleted", "The complaint has been permanently deleted.");
+              } catch (error) {
+                console.error('Delete appeal error:', error);
+                Alert.alert('Error', 'Failed to delete complaint: ' + (error.response?.data?.message || error.message));
+              }
+            }
+          }
         ]
       );
     }
@@ -292,18 +362,107 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         <Text style={[styles.reasonText, { color: '#F59E0B' }]}>Appeal Reason</Text>
       </View>
       <Text style={[styles.subNote, { fontStyle: 'normal', color: darkMode ? '#D1D5DB' : '#374151', marginTop: 4 }]}>"{item.appealReason}"</Text>
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.btnSec} onPress={() => handleAppealDecision(item, 'reject')}>
+      <View style={[styles.actions, { gap: 8 }]}>
+        <TouchableOpacity style={[styles.btnPrimDelete, { flex: 1 }]} onPress={() => handleAppealDecision(item, 'delete')}>
+          <Trash2 size={16} color="white" />
+          <Text style={styles.btnTextPrim}>Delete</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.btnSec, { flex: 1 }]} onPress={() => handleAppealDecision(item, 'reject')}>
           <XCircle size={16} color="#EF4444" />
           <Text style={[styles.btnTextSec, {color: '#EF4444'}]}>Reject</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.btnPrimForward} onPress={() => handleAppealDecision(item, 'approve')}>
+        <TouchableOpacity style={[styles.btnPrimForward, { flex: 1 }]} onPress={() => handleAppealDecision(item, 'approve')}>
           <Send size={16} color="white" />
-          <Text style={styles.btnTextPrim}>Approve & Forward</Text>
+          <Text style={styles.btnTextPrim}>Approve</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
+
+  // Render item for forwarded appeals (tracking authority progress)
+  const renderForwardedAppealItem = ({ item }) => {
+    // Status badge color based on current status
+    const getStatusColor = (status) => {
+      switch(status) {
+        case 'pending': return '#F59E0B'; // Orange
+        case 'accepted': return '#3B82F6'; // Blue
+        case 'in_progress': return '#8B5CF6'; // Purple
+        case 'resolved': return '#10B981'; // Green
+        case 'rejected': return '#EF4444'; // Red
+        default: return '#6B7280'; // Gray
+      }
+    };
+
+    const getStatusIcon = (status) => {
+      switch(status) {
+        case 'pending': return Clock;
+        case 'accepted': return CheckCircle;
+        case 'in_progress': return RefreshCw;
+        case 'resolved': return CheckCircle;
+        case 'rejected': return XCircle;
+        default: return Clock;
+      }
+    };
+
+    const StatusIcon = getStatusIcon(item.currentStatus);
+    const statusColor = getStatusColor(item.currentStatus);
+
+    return (
+      <View style={[styles.card, darkMode && styles.cardDark]}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.user}>{item.user}</Text>
+          <Text style={styles.time}><Clock size={10} color="#9CA3AF" /> Forwarded {item.forwardedAt}</Text>
+        </View>
+        <Text style={[styles.mainText, darkMode && {color: 'white'}]}>
+          Complaint #{item.complaintId}: {item.title}
+        </Text>
+        <Text style={styles.subNote}>Category: {item.categoryName}</Text>
+        
+        {/* Current Status Badge */}
+        <View style={[styles.reasonBadge, { backgroundColor: `${statusColor}20`, marginTop: 8 }]}>
+          <StatusIcon size={12} color={statusColor} />
+          <Text style={[styles.reasonText, { color: statusColor, textTransform: 'capitalize' }]}>
+            Status: {item.currentStatus.replace('_', ' ')}
+          </Text>
+        </View>
+
+        {/* Admin Remarks */}
+        {item.adminRemarks && (
+          <View style={{ marginTop: 8 }}>
+            <Text style={[styles.subNote, { fontSize: 10, color: '#9CA3AF' }]}>Admin Remarks:</Text>
+            <Text style={[styles.subNote, { fontStyle: 'normal', color: darkMode ? '#D1D5DB' : '#374151' }]}>
+              "{item.adminRemarks}"
+            </Text>
+          </View>
+        )}
+
+        {/* Status Notes from Authority */}
+        {item.statusNotes && (
+          <View style={{ marginTop: 8 }}>
+            <Text style={[styles.subNote, { fontSize: 10, color: '#9CA3AF' }]}>Authority Update:</Text>
+            <Text style={[styles.subNote, { fontStyle: 'normal', color: darkMode ? '#D1D5DB' : '#374151' }]}>
+              "{item.statusNotes}"
+            </Text>
+          </View>
+        )}
+
+        {/* View Details Button */}
+        <TouchableOpacity 
+          style={[styles.btnPrimForward, { marginTop: 12 }]} 
+          onPress={() => {
+            // Navigate to complaint details (you'll need to add navigation prop)
+            Alert.alert(
+              'Complaint Details',
+              `View full details of Complaint #${item.complaintId}\n\nCurrent Status: ${item.currentStatus}\nCategory: ${item.categoryName}`,
+              [{ text: 'OK' }]
+            );
+          }}
+        >
+          <Text style={styles.btnTextPrim}>View Full Details</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -315,17 +474,28 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         <TouchableOpacity style={[styles.tab, subTab === 'appeals' && styles.tabActive]} onPress={() => setSubTab('appeals')}>
           <Text style={[styles.tabText, subTab === 'appeals' && styles.tabTextActive]}>Appeals</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, subTab === 'forwarded' && styles.tabActive]} onPress={() => setSubTab('forwarded')}>
+          <Text style={[styles.tabText, subTab === 'forwarded' && styles.tabTextActive]}>Forwarded</Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
         <View style={{ padding: 40, alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#1E88E5" />
-          <Text style={[styles.subNote, { marginTop: 12 }]}>Loading reports...</Text>
+          <Text style={[styles.subNote, { marginTop: 12 }]}>Loading {subTab}...</Text>
         </View>
       ) : (
         <FlatList 
-          data={subTab === 'reported' ? reports : appeals}
-          renderItem={subTab === 'reported' ? renderReportItem : renderAppealItem}
+          data={
+            subTab === 'reported' ? reports : 
+            subTab === 'appeals' ? appeals : 
+            forwardedAppeals
+          }
+          renderItem={
+            subTab === 'reported' ? renderReportItem : 
+            subTab === 'appeals' ? renderAppealItem : 
+            renderForwardedAppealItem
+          }
           keyExtractor={item => item.id.toString()}
           ListEmptyComponent={<Text style={styles.emptyText}>No items in {subTab} queue.</Text>}
           contentContainerStyle={{paddingBottom: 40}}

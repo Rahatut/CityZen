@@ -522,6 +522,71 @@ exports.getComplaintsByCitizen = async (req, res) => {
   }
 };
 
+// GET COMPLAINTS ASSIGNED TO AUTHORITY
+exports.getComplaintsByAuthority = async (req, res) => {
+  try {
+    const { authorityCompanyId } = req.params;
+    const { status, page = 1, limit = 100 } = req.query;
+
+    const offset = (page - 1) * limit;
+
+    // Find all complaints assigned to this authority company
+    const assignments = await ComplaintAssignment.findAll({
+      where: { authorityCompanyId: parseInt(authorityCompanyId) },
+      attributes: ['complaintId'],
+    });
+
+    if (!assignments || assignments.length === 0) {
+      return res.json({
+        complaints: [],
+        pagination: {
+          total: 0,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: 0,
+        },
+      });
+    }
+
+    const complaintIds = assignments.map(a => a.complaintId);
+
+    const where = { id: complaintIds };
+    if (status) where.currentStatus = status;
+
+    const { count, rows } = await Complaint.findAndCountAll({
+      where,
+      include: [
+        { model: Category, attributes: ['id', 'name'] },
+        {
+          model: ComplaintImages,
+          as: 'images',
+          attributes: ['id', 'imageURL'],
+        },
+      ],
+      order: [
+        ['createdAt', 'DESC']
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+    });
+
+    res.json({
+      complaints: rows,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(count / limit),
+      },
+    });
+  } catch (error) {
+    console.error('Get Complaints by Authority Error:', error.message, error);
+    res.status(500).json({
+      message: 'Server error while fetching authority complaints.',
+    });
+  }
+};
+
 // GET COMPLAINT BY ID
 exports.getComplaintById = async (req, res) => {
   try {
