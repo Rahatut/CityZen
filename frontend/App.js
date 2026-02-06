@@ -3,15 +3,17 @@ import { StatusBar } from 'react-native';
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ComplaintProvider } from './src/context/ComplaintContext';
-import { NotificationProvider, useNotification } from './src/context/NotificationContext';
+import { NotificationProvider, useNotification, useAdminNotification } from './src/context/NotificationContext';
 
 // Helper to bridge navigation to context
 const NavigationAware = () => {
   const navigation = useNavigation();
   const { setNavigation } = useNotification();
+  const { setNavigation: setAdminNavigation } = useAdminNotification();
 
   React.useEffect(() => {
     setNavigation(navigation);
+    setAdminNavigation(navigation);
   }, [navigation]);
 
   return null;
@@ -45,26 +47,55 @@ export default function App() {
     <ComplaintProvider>
       <NotificationProvider>
         <NavigationContainer ref={(ref) => {
-          // Dirty hack to access navigation from context without deep passing
-          // Ideally we'd use a navigation service, but this works for the context injection pattern
-          if (ref) {
-            // We need a way to pass this ref to the context. 
-            // Since NotificationProvider is inside, we can't pass it as prop easily unless we restructure.
-            // Actually, we can use a ref + useEffect inside the provider if we move NavigationContainer *inside* Provider?
-            // No, Provider needs to be outside to show Toast *over* everything.
-            // But NavigationContainer needs to be ready.
-            // Let's use a "NavigationAware" component inside.
-          }
-        }}>
+            // Dirty hack to access navigation from context without deep passing
+            // Ideally we'd use a navigation service, but this works for the context injection pattern
+            if (ref) {
+              // We need a way to pass this ref to the context. 
+              // Since NotificationProvider is inside, we can't pass it as prop easily unless we restructure.
+              // Actually, we can use a ref + useEffect inside the provider if we move NavigationContainer *inside* Provider?
+              // No, Provider needs to be outside to show Toast *over* everything.
+              // But NavigationContainer needs to be ready.
+              // Let's use a "NavigationAware" component inside.
+            }
+          }}>
           <NavigationAware />
           <StatusBar barStyle={darkMode ? "light-content" : "dark-content"} backgroundColor={darkMode ? "#1F2937" : "#FFFFFF"} />
-          <Stack.Navigator initialRouteName="Landing" screenOptions={{ headerShown: false, animation: 'fade', contentStyle: { backgroundColor: darkMode ? '#111827' : '#F9FAFB' } }}>
-            <Stack.Screen name="Landing">{(props) => <LandingScreen {...props} darkMode={darkMode} />}</Stack.Screen>
-            <Stack.Screen name="Login">{(props) => <LoginScreen {...props} onLogin={() => props.navigation.replace('HomeScreen')} />}</Stack.Screen>
-            <Stack.Screen name="Signup">{(props) => <SignupScreen {...props} onSignup={() => props.navigation.replace('HomeScreen')} />}</Stack.Screen>
+          <Stack.Navigator 
+            initialRouteName="Landing" 
+            screenOptions={{ 
+              headerShown: false,
+              animation: 'simple_push',
+              contentStyle: { backgroundColor: darkMode ? '#111827' : '#F9FAFB' },
+              gestureEnabled: true,
+              gestureDirection: 'horizontal',
+            }}
+          >
+            <Stack.Screen 
+              name="Landing" 
+              options={{ animation: 'fade' }}
+            >
+              {(props) => <LandingScreen {...props} darkMode={darkMode} />}
+            </Stack.Screen>
+            <Stack.Screen 
+              name="Login" 
+              options={{ animation: 'slide_from_bottom' }}
+            >
+              {(props) => <LoginScreen {...props} onLogin={() => props.navigation.replace('HomeScreen')} />}
+            </Stack.Screen>
+            <Stack.Screen 
+              name="Signup" 
+              options={{ animation: 'slide_from_bottom' }}
+            >
+              {(props) => <SignupScreen {...props} onSignup={() => props.navigation.replace('HomeScreen')} />}
+            </Stack.Screen>
             <Stack.Screen name="HomeScreen">{(props) => <HomeScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="Feed">{(props) => <FeedScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
-            <Stack.Screen name="Camera">{(props) => <CameraScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
+            <Stack.Screen 
+              name="Camera" 
+              options={{ animation: 'slide_from_bottom' }}
+            >
+              {(props) => <CameraScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}
+            </Stack.Screen>
             <Stack.Screen name="SubmitComplaintDetails">{(props) => <SubmitComplaintDetailsScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="SubmitComplaint">{(props) => <SubmitComplaintScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="SubmittedComplaint">{(props) => <SubmittedComplaintScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>

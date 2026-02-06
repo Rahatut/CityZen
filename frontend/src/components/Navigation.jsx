@@ -1,45 +1,108 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { Bell, Moon, Sun, Building2, LogOut } from 'lucide-react-native';
-import { useNotification } from '../context/NotificationContext';
+import { useNotification, useAdminNotification, useAuthorityNotification } from '../context/NotificationContext';
+import NotificationDropdown from './NotificationDropdown';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Navigation({ onLogout, darkMode, toggleDarkMode, navigation }) {
   const { history } = useNotification();
-  const unreadCount = history ? history.filter(n => !n.read).length : 0;
+  const { getTotalUnreadCount, isAdmin } = useAdminNotification();
+  const { getAuthorityUnreadCount, isAuthority } = useAuthorityNotification();
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [userRole, setUserRole] = useState('citizen');
+  
+  // Log navigation prop
+  useEffect(() => {
+    console.log('Navigation component - navigation prop:', !!navigation, navigation);
+  }, [navigation]);
+  
+  // Determine user role
+  useEffect(() => {
+    const getUserRole = async () => {
+      try {
+        const userDataStr = await AsyncStorage.getItem('userData');
+        if (userDataStr) {
+          const userData = JSON.parse(userDataStr);
+          setUserRole(userData.role || 'citizen');
+        }
+      } catch (error) {
+        console.error('Error getting user role:', error);
+      }
+    };
+    getUserRole();
+  }, []);
+
+  // Calculate unread count based on role
+  const unreadCount = userRole === 'admin'
+    ? getTotalUnreadCount() 
+    : userRole === 'authority'
+    ? (getAuthorityUnreadCount ? getAuthorityUnreadCount() : 0)
+    : (history ? history.filter(n => !n.read).length : 0);
+
+  const handleNotificationPress = () => {
+    setShowDropdown(!showDropdown);
+  };
+
+  const handleCloseDropdown = () => {
+    setShowDropdown(false);
+  };
 
   return (
-    <View style={[styles.headerContainer, darkMode && styles.darkBg]}>
-      <View style={styles.contentRow}>
-        {/* Logo */}
-        <TouchableOpacity
-          onPress={() => navigation?.navigate('HomeScreen')}
-          style={styles.logoContainer}
-        >
-          <Building2 size={28} color="#1E88E5" />
-          <Text style={styles.logoText}>CityZen</Text>
-        </TouchableOpacity>
-
-        {/* Actions */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.iconButton} onPress={() => navigation?.navigate('Notifications')}>
-            <Bell size={24} color={darkMode ? '#D1D5DB' : '#374151'} />
-            {unreadCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
-              </View>
-            )}
+    <>
+      <View style={[styles.headerContainer, darkMode && styles.darkBg]}>
+        <View style={styles.contentRow}>
+          {/* Logo */}
+          <TouchableOpacity
+            onPress={() => {
+              if (userRole === 'admin') {
+                navigation?.navigate('AdminDashboard');
+              } else if (userRole === 'authority') {
+                navigation?.navigate('AuthorityDashboard');
+              } else {
+                navigation?.navigate('HomeScreen');
+              }
+            }}
+            style={styles.logoContainer}
+          >
+            <Building2 size={28} color="#1E88E5" />
+            <Text style={styles.logoText}>CityZen</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={toggleDarkMode} style={styles.iconButton}>
-            {darkMode ? <Sun size={24} color="#D1D5DB" /> : <Moon size={24} color="#374151" />}
-          </TouchableOpacity>
+          {/* Actions */}
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity 
+              style={styles.iconButton} 
+              onPress={handleNotificationPress}
+            >
+              <Bell size={24} color={darkMode ? '#D1D5DB' : '#374151'} />
+              {unreadCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
 
-          <TouchableOpacity onPress={onLogout} style={styles.iconButton}>
-            <LogOut size={24} color={darkMode ? '#D1D5DB' : '#374151'} />
-          </TouchableOpacity>
+            <TouchableOpacity onPress={toggleDarkMode} style={styles.iconButton}>
+              {darkMode ? <Sun size={24} color="#D1D5DB" /> : <Moon size={24} color="#374151" />}
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={onLogout} style={styles.iconButton}>
+              <LogOut size={24} color={darkMode ? '#D1D5DB' : '#374151'} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
+      
+      {/* Unified Notification Dropdown */}
+      <NotificationDropdown
+        visible={showDropdown}
+        onClose={handleCloseDropdown}
+        darkMode={darkMode}
+        navigation={navigation}
+        userRole={userRole}
+      />
+    </>
   );
 }
 

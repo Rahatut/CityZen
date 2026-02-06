@@ -38,10 +38,15 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid - clear storage and redirect to login
-      await AsyncStorage.removeItem('userToken');
-      await AsyncStorage.removeItem('userData');
-      // You can add navigation logic here if needed
+      // Only clear auth data if it's an actual auth endpoint or token verification failure
+      // Don't clear for other endpoints that might return 401 for different reasons
+      const isAuthEndpoint = error.config?.url?.includes('/auth/');
+      const isTokenExpired = error.response?.data?.message?.toLowerCase().includes('token');
+      
+      if (isAuthEndpoint || isTokenExpired) {
+        await AsyncStorage.removeItem('userToken');
+        await AsyncStorage.removeItem('userData');
+      }
     }
     return Promise.reject(error);
   }

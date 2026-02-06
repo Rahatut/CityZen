@@ -17,7 +17,7 @@ import {
 } from 'lucide-react-native';
 import api from '../services/api';
 
-export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDarkMode }) {
+export default function AuthorityDashboardScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
   const [activeTab, setActiveTab] = useState('ledger');
   const [workSubTab, setWorkSubTab] = useState('new');
   const [selectedItem, setSelectedItem] = useState(null);
@@ -51,8 +51,13 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
   const fetchComplaints = async () => {
     setLoading(true);
     try {
+      console.log('AuthorityDashboard: Fetching complaints from API...');
+      console.log('AuthorityDashboard: API Base URL:', api.defaults.baseURL);
+      
       // By default getting all, sorted by upvotes (backend default)
       const response = await api.get('/complaints?limit=100');
+      console.log('AuthorityDashboard: Received response:', response.data);
+      
       if (response.data && response.data.complaints) {
         const mapped = response.data.complaints
           .filter(c => c.currentStatus !== 'appealed') // Hide appealed from authorities
@@ -81,11 +86,30 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
               citizenProof: c.images && c.images.length > 0 ? c.images[0].imageURL : 'https://via.placeholder.com/400'
             };
           });
+        console.log('AuthorityDashboard: Mapped', mapped.length, 'complaints');
         setComplaints(mapped);
       }
     } catch (error) {
-      console.error("Failed to fetch complaints", error);
-      Alert.alert("Error", "Could not load complaints.");
+      console.error("AuthorityDashboard: Failed to fetch complaints - Full error:", error);
+      console.error("AuthorityDashboard: Error message:", error.message);
+      console.error("AuthorityDashboard: Error response:", error.response?.data);
+      console.error("AuthorityDashboard: Error status:", error.response?.status);
+      console.error("AuthorityDashboard: Request URL:", error.config?.url);
+      console.error("AuthorityDashboard: Base URL:", error.config?.baseURL);
+      
+      // More detailed error message for user
+      let errorMessage = "Could not load complaints. ";
+      if (error.message === 'Network Error') {
+        errorMessage += "Please check if the backend server is running and accessible.";
+      } else if (error.response?.status === 404) {
+        errorMessage += "API endpoint not found.";
+      } else if (error.response?.status === 401) {
+        errorMessage += "Authentication error.";
+      } else {
+        errorMessage += error.message;
+      }
+      
+      Alert.alert("Error", errorMessage);
     } finally {
       setLoading(false);
     }
@@ -446,7 +470,7 @@ export default function AuthorityDashboardScreen({ onLogout, darkMode, toggleDar
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
-      <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
 
       <View style={{ flex: 1, paddingBottom: 85 }}>
         {activeTab === 'ledger' && renderLedger()}

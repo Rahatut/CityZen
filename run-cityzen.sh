@@ -11,7 +11,7 @@ gnome-terminal \
     exec bash"
 
 # ⏳ Wait 15 seconds
-sleep 25
+sleep 15
 
 
 # === Terminal 2: AI Service ===

@@ -161,8 +161,8 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
           return authority ? authority.name : 'Unknown Authority';
         });
         setAssignedAuthorities(assignedAuthorityNames);
-        resetState(); // Clear the complaint context after successful submission
 
+        // Navigate first, then reset state will be handled by the SubmittedComplaint screen
         navigation.navigate('SubmittedComplaint');
       } else {
         Alert.alert('Error', 'Failed to submit complaint. Please try again.');

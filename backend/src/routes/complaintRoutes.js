@@ -31,6 +31,9 @@ router.get('/complaints', complaintController.getAllComplaints);
 // Get complaints by citizen ID (placed before generic :id route to avoid conflicts)
 router.get('/complaints/citizen/:citizenUid', complaintController.getComplaintsByCitizen);
 
+// Get complaints assigned to authority company
+router.get('/complaints/authority/:authorityCompanyId', complaintController.getComplaintsByAuthority);
+
 // Get reported complaints (Admin) - must be before :id route
 router.get('/complaints/reports', complaintController.getReportedComplaints);
 

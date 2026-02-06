@@ -15,6 +15,7 @@ const seedDatabase = require('./utils/seeder'); // Import the seeder logic
 const authRoutes = require('./routes/authRoutes');
 const complaintRoutes = require('./routes/complaintRoutes');
 const aiRoutes = require('./routes/aiRoutes');
+const moderationRoutes = require('./routes/moderationRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 async function startServer() {
@@ -59,6 +60,7 @@ async function startServer() {
     app.use('/api', authRoutes);
     app.use('/api', complaintRoutes);
     app.use('/api/ai', aiRoutes);
+    app.use('/api/moderation', moderationRoutes);
 
     // Static folder
     app.use('/public', express.static(path.join(__dirname, 'public')));
