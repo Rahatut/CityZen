@@ -14,3 +14,4 @@ Documentation/
 openrouter-service/.env
 openrouter-service/venv
 openrouter-service/__pycache__
+node_modules

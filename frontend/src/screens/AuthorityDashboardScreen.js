@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
+// ...existing code...
+import { Modal as RNModal } from 'react-native';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   FlatList, Image, TextInput, Alert, Modal, KeyboardAvoidingView, Platform, ActivityIndicator, Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-
+import AuthorityAnalyticsScreen from './AuthorityAnalyticsScreen';
 
 import Navigation from '../components/Navigation';
 import AuthorityMapView from '../components/AuthorityMapView';
@@ -18,6 +20,18 @@ import {
 import api from '../services/api';
 
 export default function AuthorityDashboardScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
+  const [companies, setCompanies] = useState([]);
+  const [companyModalVisible, setCompanyModalVisible] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState(null);
+  // Fetch companies (departments)
+  const fetchCompanies = async () => {
+    try {
+      const response = await api.get('/departments');
+      setCompanies(response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch companies', error);
+    }
+  };
   const [activeTab, setActiveTab] = useState('ledger');
   const [workSubTab, setWorkSubTab] = useState('new');
   const [selectedItem, setSelectedItem] = useState(null);
@@ -51,15 +65,24 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
   const fetchComplaints = async () => {
     setLoading(true);
     try {
-      console.log('AuthorityDashboard: Fetching complaints from API...');
-      console.log('AuthorityDashboard: API Base URL:', api.defaults.baseURL);
-      
-      // By default getting all, sorted by upvotes (backend default)
-      const response = await api.get('/complaints?limit=100');
+      let companyId = selectedCompany;
+      if (!companyId) {
+        // Try to get from AsyncStorage if not in state
+        companyId = await AsyncStorage.getItem('authorityCompanyId');
+      }
+      let response;
+      if (companyId) {
+        // Fetch complaints for the selected company
+        response = await api.get(`/api/complaints/authority/${companyId}?limit=100`);
+      } else {
+        // No company mapping, show all complaints
+        response = await api.get('/complaints?limit=100');
+      }
       console.log('AuthorityDashboard: Received response:', response.data);
-      
-      if (response.data && response.data.complaints) {
-        const mapped = response.data.complaints
+      if (response.data && (response.data.complaints || Array.isArray(response.data))) {
+        // Support both { complaints: [] } and []
+        const complaintsArr = response.data.complaints || response.data;
+        const mapped = complaintsArr
           .filter(c => c.currentStatus !== 'appealed') // Hide appealed from authorities
           .map(c => {
             const statusMap = {
@@ -96,7 +119,6 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
       console.error("AuthorityDashboard: Error status:", error.response?.status);
       console.error("AuthorityDashboard: Request URL:", error.config?.url);
       console.error("AuthorityDashboard: Base URL:", error.config?.baseURL);
-      
       // More detailed error message for user
       let errorMessage = "Could not load complaints. ";
       if (error.message === 'Network Error') {
@@ -108,7 +130,6 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
       } else {
         errorMessage += error.message;
       }
-      
       Alert.alert("Error", errorMessage);
     } finally {
       setLoading(false);
@@ -118,7 +139,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
   // Fetch categories
   const fetchCategories = async () => {
     try {
-      const response = await api.get('/complaints/categories');
+      const response = await api.get('/api/complaints/categories');
       setCategories(response.data || []);
     } catch (error) {
       console.error("Failed to fetch categories", error);
@@ -130,8 +151,16 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
       const userDataStr = await AsyncStorage.getItem('userData');
       if (userDataStr) {
         const userData = JSON.parse(userDataStr);
-        const response = await api.get(`/users/${userData.firebaseUid}`);
+        const response = await api.get(`/api/users/${userData.firebaseUid}`);
         setProfileData(response.data);
+        // Check if authority is mapped to a company
+        if (response.data?.Authority?.authorityCompanyId == null) {
+          await fetchCompanies();
+          setCompanyModalVisible(true);
+        } else {
+          setSelectedCompany(response.data.Authority.authorityCompanyId);
+          await AsyncStorage.setItem('authorityCompanyId', String(response.data.Authority.authorityCompanyId));
+        }
       }
     } catch (error) {
       console.error("Failed to fetch profile", error);
@@ -144,6 +173,15 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
     fetchCategories();
     fetchProfile();
   }, []);
+  // Handle company selection
+  const handleCompanySelect = async (companyId) => {
+    setSelectedCompany(companyId);
+    setCompanyModalVisible(false);
+    await AsyncStorage.setItem('authorityCompanyId', String(companyId));
+    // Optionally, update backend user profile here if needed
+    // Reload complaints for selected company if needed
+    fetchComplaints();
+  };
 
   const openGoogleMaps = (latitude, longitude) => {
     const url = `https://www.google.com/maps/search/${latitude},${longitude}`;
@@ -211,7 +249,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
         });
       }
 
-      await api.patch(`/complaints/${targetItem.id}/status`, formData, {
+      await api.patch(`/api/complaints/${targetItem.id}/status`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -470,11 +508,46 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
+            {/* Company Selection Modal */}
+            <RNModal
+              visible={companyModalVisible}
+              transparent
+              animationType="slide"
+              onRequestClose={() => {}}
+            >
+              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 24, width: '85%' }}>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Your Department</Text>
+                  <ScrollView style={{ maxHeight: 300 }}>
+                    {companies.map((company) => (
+                      <TouchableOpacity
+                        key={company.id}
+                        style={{ padding: 14, borderBottomWidth: 1, borderBottomColor: '#eee' }}
+                        onPress={() => handleCompanySelect(company.id)}
+                      >
+                        <Text style={{ fontSize: 16 }}>{company.name}</Text>
+                        {company.description ? (
+                          <Text style={{ fontSize: 12, color: '#888' }}>{company.description}</Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <TouchableOpacity style={{ marginTop: 18, alignSelf: 'flex-end' }} onPress={() => setCompanyModalVisible(false)}>
+                    <Text style={{ color: '#1E88E5', fontWeight: 'bold' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </RNModal>
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
 
       <View style={{ flex: 1, paddingBottom: 85 }}>
         {activeTab === 'ledger' && renderLedger()}
         {activeTab === 'work' && renderWorkQueue()}
+        {activeTab === 'analytics' && (
+          <View style={{ flex: 1 }}>
+            <AuthorityAnalyticsScreen />
+          </View>
+        )}
         {activeTab === 'profile' && (
           <ScrollView style={styles.paddedContent} contentContainerStyle={{ paddingBottom: 40 }}>
             <Text style={[styles.screenTitle, darkMode && styles.textWhite]}>Authority Identity</Text>
@@ -514,7 +587,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
               </View>
               <View style={[styles.statBox, darkMode && styles.cardDark]}>
                 <Text style={styles.statSub}>Resolved</Text>
-                <Text style={[styles.statNum, { color: '#10B981' }]}>
+                <Text style={[styles.statNum, { color: '#10B981' }]}> 
                   {complaints.filter(c => c.status === 'Resolved' || c.status === 'Completed').length}
                 </Text>
               </View>
@@ -672,9 +745,22 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
       </Modal>
 
       <View style={[styles.bottomNav, darkMode && styles.bottomNavDark]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('ledger')}><BarChart2 size={24} color={activeTab === 'ledger' ? '#1E88E5' : '#9CA3AF'} /><Text style={styles.navLabel}>Ledger</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('work')}><ClipboardList size={24} color={activeTab === 'work' ? '#1E88E5' : '#9CA3AF'} /><Text style={styles.navLabel}>Work</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('profile')}><User size={24} color={activeTab === 'profile' ? '#1E88E5' : '#9CA3AF'} /><Text style={styles.navLabel}>Profile</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('ledger')}>
+          <BarChart2 size={24} color={activeTab === 'ledger' ? '#1E88E5' : '#9CA3AF'} />
+          <Text style={styles.navLabel}>Ledger</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('work')}>
+          <ClipboardList size={24} color={activeTab === 'work' ? '#1E88E5' : '#9CA3AF'} />
+          <Text style={styles.navLabel}>Work</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('analytics')}>
+          <BarChart2 size={24} color={activeTab === 'analytics' ? '#1E88E5' : '#9CA3AF'} />
+          <Text style={styles.navLabel}>Analytics</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab('profile')}>
+          <User size={24} color={activeTab === 'profile' ? '#1E88E5' : '#9CA3AF'} />
+          <Text style={styles.navLabel}>Profile</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

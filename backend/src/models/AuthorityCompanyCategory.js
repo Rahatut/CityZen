@@ -20,6 +20,9 @@ const AuthorityCompanyCategory = sequelize.define('AuthorityCompanyCategory', {
       key: 'id'
     }
   }
+}, {
+  tableName: 'authoritycompanycategories',
+  timestamps: false
 });
 
 module.exports = AuthorityCompanyCategory;

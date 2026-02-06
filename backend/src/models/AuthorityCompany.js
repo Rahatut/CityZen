@@ -16,6 +16,9 @@ const AuthorityCompany = sequelize.define('AuthorityCompany', {
     type: DataTypes.STRING,
     allowNull: true,
   }
+}, {
+  tableName: 'authoritycompanies',
+  timestamps: false
 });
 
 module.exports = AuthorityCompany;

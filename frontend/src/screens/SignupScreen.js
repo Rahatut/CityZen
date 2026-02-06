@@ -1,35 +1,66 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, Text, TextInput, TouchableOpacity, ScrollView, 
   StyleSheet, KeyboardAvoidingView, Platform, Alert,
-  ActivityIndicator // NEW: Import for loading spinner
+  ActivityIndicator
 } from 'react-native';
-import { User, Mail, Lock, MapPin, Building2, ShieldCheck, CheckSquare, Square, Briefcase, Key, CheckCircle } from 'lucide-react-native';
-
-// NEW IMPORTS for Firebase (JS SDK) and API calls
+import { Picker } from '@react-native-picker/picker';
+import { 
+  User, Mail, Lock, MapPin, Building2, ShieldCheck, 
+  CheckSquare, Square, Briefcase, Key, CheckCircle 
+} from 'lucide-react-native';
 import axios from 'axios';
-import { auth } from '../config/firebase'; // Ensure this path is correct: src/config/firebase.js
-import { createUserWithEmailAndPassword } from 'firebase/auth'; 
+import { auth } from '../config/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
-// Access the API URL from your root .env file (Localtunnel URL)
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function SignupScreen({ navigation }) {
-  const [step, setStep] = useState(1); // 1: Role, 2: Form, 3: Success
+
+  const [step, setStep] = useState(1);
   const [role, setRole] = useState('citizen');
   const [agreeTerms, setAgreeTerms] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false); // NEW: Loading state
+  const [loading, setLoading] = useState(false);
 
-  // Form Data
+  const [departments, setDepartments] = useState([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+
   const [formData, setFormData] = useState({
-    fullName: '', email: '', password: '', confirmPassword: '',
-    ward: '', department: '', adminCode: ''
+    fullName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    ward: '',
+    department: '',
+    authorityCompanyId: '',
+    adminCode: '',
   });
 
-  // NEW: ASYNCHRONOUS HANDLER FUNCTION FOR SIGNUP
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      setDepartmentsLoading(true);
+      try {
+        const response = await axios.get(`${API_URL}/api/departments`, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
+        });
+        if (Array.isArray(response.data)) setDepartments(response.data);
+        else setDepartments([]);
+      } catch (error) {
+        console.error('Failed to fetch departments:', error);
+        setDepartments([]);
+      } finally {
+        setDepartmentsLoading(false);
+      }
+    };
+    if (role === 'authority') fetchDepartments();
+    else setDepartments([]);
+  }, [role]);
+
   const handleSignUp = async () => {
-    // --- Validation Checks ---
     if (!formData.email || !formData.password || !formData.fullName) {
       Alert.alert('Missing Fields', 'Please fill in all required fields.');
       return;
@@ -42,85 +73,52 @@ export default function SignupScreen({ navigation }) {
       Alert.alert('Terms', 'You must agree to the Terms & Privacy Policy.');
       return;
     }
-    
-    setLoading(true);
 
+    setLoading(true);
     try {
-      // 1. FIREBASE AUTHENTICATION (Registers user)
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         formData.email,
         formData.password
       );
-      
-      const firebaseUser = userCredential.user;
-      
-      // 2. EXPRESS BACKEND API CALL (Creates profile in PostgreSQL)
       const profileData = {
-        firebaseUid: firebaseUser.uid, // PASS THE UID TO BACKEND
-        role: role,
+        firebaseUid: userCredential.user.uid,
+        role,
         fullName: formData.fullName,
         email: formData.email,
         ward: formData.ward,
         department: formData.department,
+        authorityCompanyId: role === 'authority' ? formData.authorityCompanyId : undefined,
         adminCode: formData.adminCode,
       };
-
-      // Calls your Express API via your Localtunnel URL: POST ${API_URL}/api/users
       const response = await axios.post(`${API_URL}/api/users`, profileData, {
-          // 👇 CRITICAL FIX: Add headers to bypass Localtunnel password prompt
-          headers: {
-              'Content-Type': 'application/json',
-              'bypass-tunnel-reminder': 'true' 
-          }
+        headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' }
       });
-      
-      if (response.status === 201) {
-        setStep(3); // Move to success screen
-      } else {
-        // This block might catch a non-201 success but still show an issue (rare)
-        Alert.alert('Error', 'Sign up succeeded, but profile creation failed.');
-      }
-
+      if (response.status === 201) setStep(3);
+      else Alert.alert('Error', 'Profile creation failed.');
     } catch (error) {
-      // Handle Firebase and Backend Errors
-      let errorMessage = 'An unexpected error occurred.';
-
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'That email address is already in use!';
-      } else if (error.message.includes('Network Error') || error.response === undefined) {
-        // If error.response is undefined, it's a connection issue (Localtunnel down or blocked)
-        errorMessage = 'Connection failed. Is your Localtunnel and Express server running?';
-      } else if (error.response && error.response.data && error.response.data.message) {
-        // This catches custom error messages from your backend (e.g., Invalid Admin Code, validation errors)
-        errorMessage = error.response.data.message;
-      }
-      
-      console.error('Signup Error:', error);
-      Alert.alert('Sign Up Error', errorMessage);
-
+      let msg = 'Unexpected error';
+      if (error.code === 'auth/email-already-in-use') msg = 'Email already in use!';
+      else if (!error.response) msg = 'Connection failed.';
+      else if (error.response?.data?.message) msg = error.response.data.message;
+      Alert.alert('Sign Up Error', msg);
+      console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-
   const handleNext = () => {
-    if (step === 1) {
-      setStep(2);
-    } else if (step === 2) {
-      // Call the real sign-up function instead of simulation
-      handleSignUp();
-    }
+    if (step === 1) setStep(2);
+    else handleSignUp();
   };
-
 
   const renderRoleSelection = () => (
     <View>
       <Text style={styles.stepTitle}>Choose your Role</Text>
-      {['citizen', 'authority', 'admin'].map((r) => (
-        <TouchableOpacity 
-          key={r} 
+      {['citizen', 'authority', 'admin'].map(r => (
+        <TouchableOpacity
+          key={r}
           onPress={() => setRole(r)}
           style={[styles.roleCard, role === r && styles.roleCardActive]}
         >
@@ -150,46 +148,74 @@ export default function SignupScreen({ navigation }) {
   const renderForm = () => (
     <View>
       <Text style={styles.stepTitle}>Create {role.charAt(0).toUpperCase() + role.slice(1)} Account</Text>
-      
-      {/* Common Fields */}
-      <View style={styles.inputWrapper}><User size={20} color="#9CA3AF" /><TextInput style={styles.input} placeholder="Full Name" onChangeText={t => setFormData({...formData, fullName: t})} /></View>
-      
-      {/* Role Specific Fields */}
-      {role === 'admin' ? (
-        <View style={styles.inputWrapper}><Key size={20} color="#9CA3AF" /><TextInput style={styles.input} placeholder="Admin Code (Secure)" secureTextEntry onChangeText={t => setFormData({...formData, adminCode: t})} /></View>
-      ) : null}
 
-      {role === 'authority' ? (
-        <View style={styles.inputWrapper}><Briefcase size={20} color="#9CA3AF" /><TextInput style={styles.input} placeholder="Department (e.g. WASA)" onChangeText={t => setFormData({...formData, department: t})} /></View>
-      ) : null}
+      <View style={styles.inputWrapper}>
+        <User size={20} color="#9CA3AF" />
+        <TextInput style={styles.input} placeholder="Full Name" onChangeText={t => setFormData({ ...formData, fullName: t })} />
+      </View>
 
-      <View style={styles.inputWrapper}><Mail size={20} color="#9CA3AF" /><TextInput style={styles.input} placeholder={role === 'authority' ? "Official Email / ID" : "Email Address"} keyboardType="email-address" onChangeText={t => setFormData({...formData, email: t})} /></View>
-      
-      {role !== 'admin' && (
-        <View style={styles.inputWrapper}><MapPin size={20} color="#9CA3AF" /><TextInput style={styles.input} placeholder="Ward / Area" onChangeText={t => setFormData({...formData, ward: t})} /></View>
+      {role === 'admin' && (
+        <View style={styles.inputWrapper}>
+          <Key size={20} color="#9CA3AF" />
+          <TextInput style={styles.input} placeholder="Admin Code (Secure)" secureTextEntry onChangeText={t => setFormData({ ...formData, adminCode: t })} />
+        </View>
       )}
 
-      <View style={styles.inputWrapper}><Lock size={20} color="#9CA3AF" /><TextInput style={styles.input} placeholder="Password" secureTextEntry onChangeText={t => setFormData({...formData, password: t})} /></View>
-      <View style={styles.inputWrapper}><Lock size={20} color="#9CA3AF" /><TextInput style={styles.input} placeholder="Confirm Password" secureTextEntry onChangeText={t => setFormData({...formData, confirmPassword: t})} /></View>
+      {role === 'authority' && (
+        <View style={styles.inputWrapper}>
+          <Briefcase size={20} color="#9CA3AF" />
+          <Picker
+            selectedValue={formData.authorityCompanyId}
+            style={{ flex: 1, marginLeft: 12 }}
+            enabled={!departmentsLoading}
+            onValueChange={v => {
+              const dep = departments.find(d => d.id === v);
+              setFormData({ ...formData, authorityCompanyId: v, department: dep ? dep.name : '' });
+            }}
+          >
+            <Picker.Item label="Select Department" value="" />
+            {departments.map(dep => (
+              <Picker.Item key={dep.id} label={dep.name} value={dep.id} />
+            ))}
+          </Picker>
+        </View>
+      )}
+
+      <View style={styles.inputWrapper}>
+        <Mail size={20} color="#9CA3AF" />
+        <TextInput style={styles.input} placeholder={role === 'authority' ? "Official Email / ID" : "Email Address"} keyboardType="email-address" onChangeText={t => setFormData({ ...formData, email: t })} />
+      </View>
+
+      {role !== 'admin' && (
+        <View style={styles.inputWrapper}>
+          <MapPin size={20} color="#9CA3AF" />
+          <TextInput style={styles.input} placeholder="Ward / Area" onChangeText={t => setFormData({ ...formData, ward: t })} />
+        </View>
+      )}
+
+      <View style={styles.inputWrapper}>
+        <Lock size={20} color="#9CA3AF" />
+        <TextInput style={styles.input} placeholder="Password" secureTextEntry onChangeText={t => setFormData({ ...formData, password: t })} />
+      </View>
+
+      <View style={styles.inputWrapper}>
+        <Lock size={20} color="#9CA3AF" />
+        <TextInput style={styles.input} placeholder="Confirm Password" secureTextEntry onChangeText={t => setFormData({ ...formData, confirmPassword: t })} />
+      </View>
 
       {role === 'citizen' && (
         <Text style={styles.privacyNote}>🔒 Your identity is hidden from public view.</Text>
       )}
 
-      {/* Terms Checkbox */}
       <TouchableOpacity onPress={() => setAgreeTerms(!agreeTerms)} style={styles.checkboxContainer}>
         {agreeTerms ? <CheckSquare size={20} color="#1E88E5" /> : <Square size={20} color="#9CA3AF" />}
         <Text style={styles.checkboxText}>I agree to the Terms & Privacy Policy</Text>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={handleNext} style={styles.submitBtn} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="white" /> // Show spinner when loading
-        ) : (
-          <Text style={styles.submitBtnText}>Sign Up</Text>
-        )}
+        {loading ? <ActivityIndicator color="white" /> : <Text style={styles.submitBtnText}>Sign Up</Text>}
       </TouchableOpacity>
-      
+
       <TouchableOpacity onPress={() => setStep(1)} style={{alignItems: 'center', marginTop: 16}} disabled={loading}>
         <Text style={{color: '#6B7280'}}>Back to Role Selection</Text>
       </TouchableOpacity>
@@ -201,7 +227,6 @@ export default function SignupScreen({ navigation }) {
       <CheckCircle size={80} color="#16A34A" />
       <Text style={styles.successTitle}>Account Created!</Text>
       <Text style={styles.successSub}>Your {role} account has been successfully created. You can now log in.</Text>
-      
       <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.submitBtn}>
         <Text style={styles.submitBtnText}>Go to Login</Text>
       </TouchableOpacity>

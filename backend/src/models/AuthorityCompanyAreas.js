@@ -33,6 +33,9 @@ const AuthorityCompanyAreas = sequelize.define('AuthorityCompanyAreas', {
     type: DataTypes.DECIMAL(5, 2),
     allowNull: false,
   }
+}, {
+  tableName: 'authoritycompanyareas',
+  timestamps: false
 });
 
 module.exports = AuthorityCompanyAreas;

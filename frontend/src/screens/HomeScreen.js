@@ -41,7 +41,7 @@ export default function HomeScreen({ navigation, onLogout, darkMode, toggleDarkM
 
         if (uid) {
           // Fetch user specific complaints
-          const response = await api.get(`/complaints/citizen/${uid}`);
+          const response = await api.get(`/api/complaints/citizen/${uid}`);
           console.log("HomeScreen API Response Complaints Count:", response.data.complaints?.length);
           const complaints = response.data.complaints || [];
 

@@ -9,7 +9,7 @@ exports.registerProfile = async (req, res) => {
   // Use a transaction to prevent partial data creation
   const t = await sequelize.transaction();
   try {
-    const { firebaseUid, email, fullName, role, ward, department, adminCode } = req.body;
+    const { firebaseUid, email, fullName, role, ward, department, authorityCompanyId, adminCode } = req.body;
 
     if (!firebaseUid || !email || !fullName || !role) {
       return res.status(400).json({ message: 'Missing core identity fields.' });
@@ -23,8 +23,9 @@ exports.registerProfile = async (req, res) => {
       if (!ward) throw new Error('Citizen signup requires a Ward/Area.');
       await Citizen.create({ UserFirebaseUid: firebaseUid, ward }, { transaction: t });
     } else if (role === 'authority') {
-      if (!department || !ward) throw new Error('Authority requires Department and Ward.');
-      await Authority.create({ UserFirebaseUid: firebaseUid, department, ward }, { transaction: t });
+      if (!authorityCompanyId || !ward) throw new Error('Authority signup requires Department selection and Ward.');
+      // Optionally, department name can be stored for display, but authorityCompanyId is the main mapping
+      await Authority.create({ UserFirebaseUid: firebaseUid, authorityCompanyId, department, ward }, { transaction: t });
     } else if (role === 'admin') {
       // Allow admin signup with any provided code
       await Admin.create({ UserFirebaseUid: firebaseUid }, { transaction: t });
@@ -50,12 +51,23 @@ exports.getProfileByUid = async (req, res) => {
     const { firebaseUid } = req.params;
 
     // Find the user in the PostgreSQL database using the UID obtained from Firebase login
+
     const user = await User.findOne({
       where: { firebaseUid },
       attributes: ['firebaseUid', 'email', 'fullName', 'role', 'createdAt'],
       include: [
         { model: Citizen, required: false },
-        { model: Authority, required: false },
+        {
+          model: Authority,
+          required: false,
+          include: [
+            {
+              model: sequelize.models.AuthorityCompany,
+              attributes: ['id', 'name', 'description'],
+              required: false
+            }
+          ]
+        },
         { model: Admin, required: false }
       ]
     });

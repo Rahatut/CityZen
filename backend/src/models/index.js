@@ -25,6 +25,7 @@ User.hasOne(Citizen, {
 });
 Citizen.belongsTo(User);
 
+
 User.hasOne(Authority, {
   foreignKey: {
     name: 'UserFirebaseUid',
@@ -33,6 +34,10 @@ User.hasOne(Authority, {
   onDelete: 'CASCADE'
 });
 Authority.belongsTo(User);
+
+// Authority belongs to AuthorityCompany (department mapping)
+Authority.belongsTo(AuthorityCompany, { foreignKey: 'authorityCompanyId' });
+AuthorityCompany.hasMany(Authority, { foreignKey: 'authorityCompanyId' });
 
 User.hasOne(Admin, {
   foreignKey: {

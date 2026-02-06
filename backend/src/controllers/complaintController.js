@@ -541,8 +541,22 @@ exports.getComplaintsByAuthority = async (req, res) => {
   try {
     const { authorityCompanyId } = req.params;
     const { status, page = 1, limit = 100 } = req.query;
-
     const offset = (page - 1) * limit;
+
+    // Check if authorityCompanyId exists
+    const company = await sequelize.models.AuthorityCompany.findByPk(parseInt(authorityCompanyId));
+    if (!company) {
+      return res.json({
+        complaints: [],
+        pagination: {
+          total: 0,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          pages: 0,
+        },
+        message: 'Authority company not found.'
+      });
+    }
 
     // Find all complaints assigned to this authority company
     const assignments = await ComplaintAssignment.findAll({
@@ -559,11 +573,11 @@ exports.getComplaintsByAuthority = async (req, res) => {
           limit: parseInt(limit),
           pages: 0,
         },
+        message: 'No complaints assigned to this authority company.'
       });
     }
 
     const complaintIds = assignments.map(a => a.complaintId);
-
     const where = { id: complaintIds };
     if (status) where.currentStatus = status;
 

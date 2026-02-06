@@ -65,14 +65,23 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   const fetchComplaints = useCallback(async () => {
     try {
       setError(null);
-      let url = `${API_URL}/api/complaints?page=1&limit=50`;
-
-      // Get user ID for upvote persistence check
+      // Get user info
       const jsonValue = await AsyncStorage.getItem('userData');
       const retrievedUserData = jsonValue != null ? JSON.parse(jsonValue) : null;
       setUserData(retrievedUserData);
 
-      if (retrievedUserData && retrievedUserData.firebaseUid) {
+      let url = `${API_URL}/api/complaints?page=1&limit=50`;
+      let authorityCompanyId = null;
+      if (retrievedUserData && retrievedUserData.role === 'authority') {
+        // Try to get companyId from userData or AsyncStorage
+        authorityCompanyId = retrievedUserData.companyId || retrievedUserData.authorityCompanyId;
+        if (!authorityCompanyId) {
+          authorityCompanyId = await AsyncStorage.getItem('authorityCompanyId');
+        }
+        if (authorityCompanyId) {
+          url = `${API_URL}/api/complaints/authority/${authorityCompanyId}?limit=50`;
+        }
+      } else if (retrievedUserData && retrievedUserData.firebaseUid) {
         url += `&citizenUid=${retrievedUserData.firebaseUid}`;
       }
 
