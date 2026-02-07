@@ -84,7 +84,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
         // Support both { complaints: [] } and []
         const complaintsArr = response.data.complaints || response.data;
         const mapped = complaintsArr
-          .filter(c => c.currentStatus !== 'appealed') // Hide appealed from authorities
+          .filter(c => c.currentStatus !== 'appealed' || c.forwardedByAdmin) // Show appeals only if forwarded by admin
           .map(c => {
             const statusMap = {
               'pending': 'Pending',
@@ -92,7 +92,8 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
               'in_progress': 'In Progress',
               'resolved': 'Resolved',
               'rejected': 'Rejected',
-              'completed': 'Completed'
+              'completed': 'Completed',
+              'appealed': 'Appeal (Forwarded)'
             };
             return {
               id: c.id,

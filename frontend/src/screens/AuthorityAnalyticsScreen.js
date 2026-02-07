@@ -17,6 +17,7 @@ export default function AuthorityAnalyticsScreen() {
 		accepted: 0,
 		inProgress: 0,
 		avgResolution: 0,
+		avgRating: 0,
 	});
 	const [deptComplaints, setDeptComplaints] = useState([]);
 	const [loading, setLoading] = useState(true);
@@ -90,8 +91,13 @@ export default function AuthorityAnalyticsScreen() {
 					avgResolution = parseFloat((totalMs / resolutionTimes.length / 1000 / 60 / 60).toFixed(1));
 				}
 
+				const ratings = deptComplaints.filter(c => c.rating != null).map(c => c.rating);
+				const avgRating = ratings.length > 0
+					? parseFloat((ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1))
+					: 0;
+
 				setDeptComplaints(deptComplaints);
-				setMetrics({ total, resolved, pending, appealed, accepted, inProgress, avgResolution });
+				setMetrics({ total, resolved, pending, appealed, accepted, inProgress, avgResolution, avgRating });
 			} catch (e) {
 				console.error("Analytics Error:", e);
 				setMetrics({ total: 0, resolved: 0, pending: 0, appealed: 0, accepted: 0, inProgress: 0, avgResolution: 0 });
@@ -172,9 +178,13 @@ export default function AuthorityAnalyticsScreen() {
 					<Text style={styles.metricLabel}>Resolved</Text>
 					<Text style={styles.metricValue}>{loading ? <ActivityIndicator size="small" /> : metrics.resolved}</Text>
 				</TouchableOpacity>
-				<View style={[styles.metricBox, { flexBasis: '100%' }]}>
+				<View style={[styles.metricBox, { flexBasis: '48%' }]}>
 					<Text style={styles.metricLabel}>Avg. Resolution Time (hrs)</Text>
 					<Text style={styles.metricValue}>{loading ? <ActivityIndicator size="small" /> : metrics.avgResolution}</Text>
+				</View>
+				<View style={[styles.metricBox, { flexBasis: '48%' }]}>
+					<Text style={styles.metricLabel}>Avg. User Rating</Text>
+					<Text style={styles.metricValue}>{loading ? <ActivityIndicator size="small" /> : `${metrics.avgRating} ★`}</Text>
 				</View>
 			</View>
 

@@ -10,7 +10,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
   // Use the navigation hook as fallback if prop is not provided
   const navigationHook = useNavigation();
   const navigation = navigationProp || navigationHook;
-  
+
   // Citizen state
   const { history, markAsRead, markAsUnread, markAllAsRead } = useNotification();
   const [markingAllRead, setMarkingAllRead] = useState(false);
@@ -22,10 +22,10 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
   // Authority state
   const { authorityHistory, markAuthorityAsRead, markAuthorityAsUnread, markAllAuthorityAsRead, getAuthorityUnreadCount } = useAuthorityNotification();
   const [markingAllAuthorityRead, setMarkingAllAuthorityRead] = useState(false);
-  
+
   // Common state
   const [loading, setLoading] = useState(true);
-  
+
   // Debug log when component mounts or navigation changes
   useEffect(() => {
     console.log('NotificationDropdown - navigation prop:', !!navigationProp, 'hook:', !!navigationHook, 'using:', !!navigation);
@@ -81,7 +81,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
   const handleAuthorityNotificationClick = async (notif) => {
     await markAuthorityAsRead(notif.uniqId);
     onClose();
-    
+
     if (notif.complaintId) {
       navigation?.navigate('ComplaintDetails', { id: notif.complaintId });
     }
@@ -126,15 +126,15 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
     console.log('Complaint ID from notification:', notif.complaintId);
     console.log('Navigation object available?:', !!navigation);
     console.log('Navigation object:', navigation);
-    
+
     await markAdminAsRead(notif.uniqId);
     onClose();
-    
+
     // If notification has a complaint ID, navigate directly to complaint details
     if (notif.complaintId) {
       console.log('✓ Complaint ID exists, attempting navigation...');
       console.log('Navigating to ComplaintDetails with params:', { id: notif.complaintId });
-      
+
       try {
         if (navigation && typeof navigation.navigate === 'function') {
           navigation.navigate('ComplaintDetails', { id: notif.complaintId });
@@ -148,7 +148,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
     } else {
       console.log('✗ No complaint ID, navigating to flags tab');
       // Fallback to flags tab if no complaint ID
-      navigation?.navigate('AdminDashboard', { 
+      navigation?.navigate('AdminDashboard', {
         initialTab: 'flags',
         flagTab: notif.type === 'report' ? 'reported' : 'appealed'
       });
@@ -213,7 +213,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
           <Text style={[styles.sectionTitle, darkMode && styles.textGray]}>Earlier</Text>
           {readNotifications.slice(0, 10).map((notif) => (
             <View key={notif.uniqId} style={[styles.notifItem, darkMode && styles.notifItemDark]}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.notifContent}
                 onPress={() => {
                   onClose();
@@ -235,7 +235,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                   {new Date(notif.timestamp).toLocaleString()}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.unreadBtn}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -264,7 +264,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
   const renderAuthorityContent = () => {
     const unreadAuthority = authorityHistory.filter(n => !n.read);
     const readAuthority = authorityHistory.filter(n => n.read);
-    
+
     return (
       <>
         {/* Unread Authority Notifications */}
@@ -394,7 +394,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
           </Text>
           {readAdminNotifications.map((notif) => (
             <View key={notif.uniqId} style={[styles.notifItem, darkMode && styles.notifItemDark]}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.notifContent}
                 onPress={() => handleAdminNotificationClick(notif)}
               >
@@ -411,7 +411,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                   {new Date(notif.timestamp).toLocaleString()}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.unreadBtn}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -442,7 +442,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
       case 'admin':
         return 'Admin Notifications';
       case 'authority':
-        return 'Assigned Complaints';
+        return 'Notification';
       default:
         return 'Notifications';
     }
@@ -453,12 +453,12 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
   return (
     <>
       {/* Backdrop */}
-      <TouchableOpacity 
-        style={styles.backdrop} 
-        activeOpacity={1} 
+      <TouchableOpacity
+        style={styles.backdrop}
+        activeOpacity={1}
         onPress={onClose}
       />
-      
+
       {/* Dropdown */}
       <View style={[styles.dropdown, darkMode && styles.dropdownDark, userRole === 'citizen' && styles.dropdownWide]}>
         {/* Header */}

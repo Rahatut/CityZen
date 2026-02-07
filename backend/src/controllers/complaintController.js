@@ -692,6 +692,11 @@ exports.getComplaintById = async (req, res) => {
     const include = [
       { model: Category, attributes: ['id', 'name', 'description'] },
       {
+        model: AuthorityCompany,
+        attributes: ['id', 'name', 'description'],
+        through: { attributes: [] } // Exclude the junction table data
+      },
+      {
         model: ComplaintImages,
         as: 'images',
         attributes: ['id', 'imageURL'],

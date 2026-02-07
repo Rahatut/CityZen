@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput, KeyboardAvoidingView } from 'react-native';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
-import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle, Camera, X } from 'lucide-react-native';
+import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle, Camera, X, Building2 } from 'lucide-react-native';
 
 import axios from 'axios';
 
@@ -264,6 +264,17 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
                 {(complaint?.currentStatus || 'pending').replace('_', ' ').replace(/^./, s => s.toUpperCase())}
               </Text>
             </View>
+
+            {/* Assigned Authority */}
+            {complaint?.AuthorityCompanies && complaint.AuthorityCompanies.length > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+                <Building2 size={16} color="#4B5563" />
+                <Text style={{ marginLeft: 6, fontSize: 14, color: '#4B5563', fontWeight: '500' }}>
+                  Sent to: <Text style={{ color: '#1E88E5', fontWeight: 'bold' }}>{complaint.AuthorityCompanies[0].name}</Text>
+                </Text>
+              </View>
+            )}
+
             <Text style={[styles.description, darkMode && styles.textGray]}>{complaint?.description || 'No description provided.'}</Text>
             <View style={styles.actionsRow}>
               <TouchableOpacity style={styles.actionButton} onPress={handleUpvote}>
