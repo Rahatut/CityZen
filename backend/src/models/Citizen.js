@@ -2,10 +2,6 @@ const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
 const Citizen = sequelize.define('Citizen', {
-  ward: {
-    type: DataTypes.STRING, 
-    allowNull: false
-  },
   strikes: {
     type: DataTypes.INTEGER,
     defaultValue: 0,

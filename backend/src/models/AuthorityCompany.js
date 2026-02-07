@@ -17,7 +17,6 @@ const AuthorityCompany = sequelize.define('AuthorityCompany', {
     allowNull: true,
   }
 }, {
-  tableName: 'authoritycompanies',
   timestamps: false
 });
 

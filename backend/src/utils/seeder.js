@@ -1,4 +1,4 @@
-        const { Category, AuthorityCompany, AuthorityCompanyCategory, AuthorityCompanyAreas } = require('../models');
+const { Category, AuthorityCompany, AuthorityCompanyCategory, AuthorityCompanyAreas } = require('../models');
 const logger = require('./logger');
 
 async function seedDatabase() {
@@ -14,14 +14,22 @@ async function seedDatabase() {
 
         logger.info("Seeding database for first time...");
 
+
         // Seed categories into database
         const categoriesToSeed = [
-            { name: 'Roads & Transport', description: 'Issues related to roads, traffic, and public transportation.' },
-            { name: 'Garbage & Waste Management', description: 'Issues related to waste collection, illegal dumping, and recycling.' },
-            { name: 'Streetlights & Electrical', description: 'Issues related to streetlights, power outages, and electrical hazards.' },
-            { name: 'Water Supply & Drains', description: 'Issues related to water supply, sewage, and drainage systems.' },
-            { name: 'Buildings & Infrastructure', description: 'Issues related to public buildings, bridges, and other infrastructure.' },
-            { name: 'Environment & Public Spaces', description: 'Issues related to parks, green spaces, pollution, and environmental quality.' }
+            { name: 'Pothole', description: 'Damaged road surfaces causing vehicle damage, traffic disruption, and increased accident risk.' },
+            { name: 'Broken Road', description: 'Severely damaged roads disrupting traffic flow and creating safety risks for commuters.' },
+            { name: 'Waterlogged Roads', description: 'Flooded roads due to poor drainage causing traffic delays and pedestrian difficulties.' },
+            { name: 'Broken Footpath', description: 'Damaged sidewalks creating walking hazards for pedestrians, elderly, and disabled individuals.' },
+            { name: 'Open Manhole', description: 'Uncovered manholes posing serious safety risks to pedestrians, cyclists, and vehicles.' },
+            { name: 'Garbage/Pollution', description: 'Uncollected waste causing environmental pollution, health hazards, and unpleasant urban conditions.' },
+            { name: 'Broken Streetlight', description: 'Non-functional streetlights reducing visibility and increasing nighttime crime and accident risks.' },
+            { name: 'Hanging Electrical Wires', description: 'Loose electrical wires creating electrocution, fire hazards, and public safety threats.' },
+            { name: 'Drain Blockage', description: 'Blocked drains causing waterlogging, flooding, bad odor, and mosquito breeding.' },
+            { name: 'Open Drain', description: 'Uncovered drains posing accident risks, health hazards, and sanitation problems.' },
+            { name: 'Water Supply Leakage', description: 'Leaking pipes wasting water, damaging roads, and reducing supply pressure.' },
+            { name: 'Risky Infrastructure', description: 'Unsafe or weakened structures posing collapse risks and public safety concerns.' },
+            { name: 'Water Pollution', description: 'Polluted water bodies harming public health and damaging the environment.' }
         ];
 
         const categoryMap = {};
@@ -33,6 +41,7 @@ async function seedDatabase() {
             categoryMap[categoryData.name] = category.id;
         }
         logger.info("Categories seeded");
+
 
         // Seed authority companies into database
         const companiesToSeed = [
@@ -56,16 +65,19 @@ async function seedDatabase() {
         }
         logger.info("Companies seeded");
 
+
+        // Seed authority categories into database
         const authorityCategoriesToSeed = [
-            { companyName: 'DNCC (Dhaka North City Corporation)', categoryNames: ['Roads & Transport', 'Garbage & Waste Management', 'Streetlights & Electrical', 'Water Supply & Drains', 'Buildings & Infrastructure', 'Environment & Public Spaces'] }, 
-            { companyName: 'DSCC (Dhaka South City Corporation)', categoryNames: ['Roads & Transport', 'Garbage & Waste Management', 'Streetlights & Electrical', 'Water Supply & Drains', 'Buildings & Infrastructure', 'Environment & Public Spaces'] }, 
-            { companyName: 'DESCO (Dhaka Electric Supply Company)', categoryNames: ['Streetlights & Electrical'] },         
-            { companyName: 'DPDC (Dhaka Power Distribution Company)', categoryNames: ['Streetlights & Electrical'] },         
-            { companyName: 'DoE (Department of Environment)', categoryNames: ['Environment & Public Spaces'] },         
-            { companyName: 'DWASA (Dhaka Water Supply & Sewerage Authority)', categoryNames: ['Water Supply & Drains'] },
-            { companyName: 'GCC (Gazipur City Corporation)', categoryNames: ['Roads & Transport', 'Garbage & Waste Management', 'Streetlights & Electrical', 'Water Supply & Drains', 'Buildings & Infrastructure', 'Environment & Public Spaces'] }, 
-            { companyName: 'Gazipur Palli Bidyut Samity-1', categoryNames: ['Streetlights & Electrical'] }
-        ];         
+            { companyName: 'DNCC (Dhaka North City Corporation)', categoryNames: ['Pothole', 'Broken Road', 'Broken Footpath', 'Open Manhole', 'Garbage/Pollution', 'Broken Streetlight', 'Drain Blockage', 'Open Drain', 'Risky Infrastructure', 'Water Pollution'] },
+            { companyName: 'DSCC (Dhaka South City Corporation)', categoryNames: ['Pothole', 'Broken Road', 'Broken Footpath', 'Open Manhole', 'Garbage/Pollution', 'Broken Streetlight', 'Drain Blockage', 'Open Drain', 'Risky Infrastructure', 'Water Pollution'] },
+            { companyName: 'DESCO (Dhaka Electric Supply Company)', categoryNames: ['Broken Streetlight', 'Hanging Electrical Wires'] },
+            { companyName: 'DPDC (Dhaka Power Distribution Company)', categoryNames: ['Broken Streetlight', 'Hanging Electrical Wires'] },
+            { companyName: 'DoE (Department of Environment)', categoryNames: ['Garbage/Pollution', 'Water Pollution'] },
+            { companyName: 'DWASA (Dhaka Water Supply & Sewerage Authority)', categoryNames: ['Waterlogged Roads', 'Drain Blockage', 'Open Drain', 'Water Supply Leakage', 'Water Pollution'] },
+            { companyName: 'GCC (Gazipur City Corporation)', categoryNames: ['Pothole', 'Broken Road', 'Broken Footpath', 'Open Manhole', 'Garbage/Pollution', 'Broken Streetlight', 'Drain Blockage', 'Open Drain', 'Risky Infrastructure', 'Water Pollution'] },
+            { companyName: 'Gazipur Palli Bidyut Samity-1', categoryNames: ['Broken Streetlight', 'Hanging Electrical Wires'] }
+          ];
+                  
 
         for (const mapping of authorityCategoriesToSeed) {
             const authorityCompanyId = companyMap[mapping.companyName];
@@ -83,6 +95,7 @@ async function seedDatabase() {
             }
         }         
         logger.info("Authority Company Categories relations seeded");
+
 
         // Seed authority company areas into database
         const authorityAreasToSeed = [

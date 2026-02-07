@@ -1,21 +1,18 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
+const AuthorityCompany = require('./AuthorityCompany');
 
 
 const Authority = sequelize.define('Authority', {
   authorityCompanyId: {
     type: DataTypes.INTEGER,
-    allowNull: true, // Allow null for legacy users, but should be set for new signups
+    allowNull: false, 
     references: {
-      model: 'authoritycompanies',
+      model: AuthorityCompany,
       key: 'id'
     }
   },
   department: {
-    type: DataTypes.STRING, 
-    allowNull: false
-  },
-  ward: {
     type: DataTypes.STRING, 
     allowNull: false
   }

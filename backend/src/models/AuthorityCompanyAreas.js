@@ -34,7 +34,6 @@ const AuthorityCompanyAreas = sequelize.define('AuthorityCompanyAreas', {
     allowNull: false,
   }
 }, {
-  tableName: 'authoritycompanyareas',
   timestamps: false
 });
 
