@@ -3,7 +3,7 @@ import uvicorn
 import json
 import base64
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -70,7 +70,10 @@ class GenerateComplaintTextRequest(BaseModel):
 # -------------------- Vision Detection (LLM) --------------------
 
 @app.post("/detect_with_llm")
-async def detect_with_llm(image: UploadFile = File(...)):
+async def detect_with_llm(
+    image: UploadFile = File(...),
+    categories: str = Form(...) # Add categories as a Form parameter
+):
     try:
         # ---- Validation ----
         if not image.content_type.startswith("image/"):
@@ -82,31 +85,34 @@ async def detect_with_llm(image: UploadFile = File(...)):
 
         image_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
-        prompt = """
+        # Parse categories
+        category_list: List[Dict[str, Any]] = json.loads(categories)
+        allowed_category_names = [cat['name'] for cat in category_list]
+        category_name_to_id = {cat['name']: cat['id'] for cat in category_list}
+
+        # Add "No Issue" as a special category for the LLM
+        allowed_category_names_for_llm = allowed_category_names + ["No Issue"]
+
+        prompt = f"""
 You are a civic issue detection AI for Dhaka city.
 
 Analyze the image and identify the SINGLE most relevant issue.
 
 Allowed categories:
-- Pothole
-- Open Manhole
-- Waterlogging
-- Garbage
-- Broken Road
-- No Issue
+{chr(10).join([f'- {name}' for name in allowed_category_names_for_llm])}
 
 Rules:
 - Return ONLY valid JSON
 - Pick exactly ONE category from the list
 - Confidence must be a number between 0 and 100
 - If unsure or image is unclear, return:
-  { "label": "No Issue", "confidence": 40 }
+  {{ "label": "No Issue", "confidence": 40 }}
 
 Output JSON schema:
-{
+{{
   "label": "string",
   "confidence": number
-}
+}}
 """
 
         response = client.chat.completions.create(
@@ -142,8 +148,21 @@ Output JSON schema:
 
         confidence = max(0, min(100, confidence))
 
+        # Get the ID for the detected label
+        detected_label = parsed["label"]
+        category_id = category_name_to_id.get(detected_label)
+
+        if detected_label != "No Issue" and category_id is None:
+            # If LLM returned an unknown category and it's not "No Issue",
+            # fallback to "No Issue" or raise an error.
+            # For now, let's return it with id as None or handle as "No Issue".
+            # It's safer to return "No Issue" if the label is not found in allowed categories
+            detected_label = "No Issue"
+            category_id = None # Or the ID of "No Issue" if it exists in DB
+
         return {
-            "label": parsed["label"],
+            "id": category_id,
+            "label": detected_label,
             "confidence": confidence
         }
 
@@ -218,61 +237,6 @@ async def generate_complaint_text(request: GenerateComplaintTextRequest):
         print(str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/recommend-authority")
-async def recommend_authority(request: RecommendationRequest):
-    """
-    Receives complaint details and a list of authorities,
-    and returns a recommended authority from OpenRouter.
-    """
-    authorities_list_str = "\n".join([f"{a.id}. {a.name}" for a in request.authorities])
-    location_info = f"({request.latitude}, {request.longitude})"
-    if request.location_string:
-        location_info = f"{request.location_string} ({request.latitude}, {request.longitude})"
-
-    prompt = (
-        f"You are an AI civic issue routing assistant for Dhaka city.\n\n"
-        f"Select the most appropriate authority/authorities from the list below, based on complaint location (check south vs north Dhaka) and issue type.\n"
-        f"Return ONLY valid JSON.\n\n"
-        f"Authorities:\n"
-        f"{authorities_list_str}\n\n"
-        f"Complaint Details:\n"
-        f"Category: {request.category}\n"
-        f"Location: {location_info}\n\n"
-        f"Rules:\n"
-        f"- Do NOT invent or add authorities\n"
-        f"- Include a confidence score between 0 and 1\n"
-        f"- JSON ONLY (no markdown, no text)\n\n"
-        f"Output format:\n"
-        f"["
-        f"{{\n"
-        f"  \"authorityCompanyId\": number,\n"
-        f"  \"confidence\": number,\n"
-        f"  \"reason\": string\n"
-        f"}}"
-        f"]"
-    )
-    try:
-        print("-----PROMPT-----")
-        print(prompt)
-        response = client.chat.completions.create(
-            model="meta-llama/llama-3-8b-instruct",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        print("-----RESPONSE-----")
-        print(response.choices[0].message.content)
-        
-        # Extract JSON from the response
-        parsed_json = extract_json_from_response(response.choices[0].message.content)
-
-        if parsed_json:
-            return parsed_json
-        else:
-            raise ValueError("No valid JSON found in the model's response.")
-            
-    except Exception as e:
-        print("-----ERROR-----")
-        print(str(e))
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
