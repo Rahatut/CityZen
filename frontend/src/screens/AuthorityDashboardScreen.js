@@ -33,6 +33,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
     }
   };
   const [activeTab, setActiveTab] = useState('ledger');
+  const [previousTab, setPreviousTab] = useState('ledger');
   const [workSubTab, setWorkSubTab] = useState('new');
   const [selectedItem, setSelectedItem] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,7 +74,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
       let response;
       if (companyId) {
         // Fetch complaints for the selected company
-        response = await api.get(`/api/complaints/authority/${companyId}?limit=100`);
+        response = await api.get(`/complaints/authority/${companyId}?limit=100`);
       } else {
         // No company mapping, show all complaints
         response = await api.get('/complaints?limit=100');
@@ -139,7 +140,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
   // Fetch categories
   const fetchCategories = async () => {
     try {
-      const response = await api.get('/api/complaints/categories');
+      const response = await api.get('/complaints/categories');
       setCategories(response.data || []);
     } catch (error) {
       console.error("Failed to fetch categories", error);
@@ -151,7 +152,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
       const userDataStr = await AsyncStorage.getItem('userData');
       if (userDataStr) {
         const userData = JSON.parse(userDataStr);
-        const response = await api.get(`/api/users/${userData.firebaseUid}`);
+        const response = await api.get(`/users/${userData.firebaseUid}`);
         setProfileData(response.data);
         // Check if authority is mapped to a company
         if (response.data?.Authority?.authorityCompanyId == null) {
@@ -249,7 +250,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
         });
       }
 
-      await api.patch(`/api/complaints/${targetItem.id}/status`, formData, {
+      await api.patch(`/complaints/${targetItem.id}/status`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -261,7 +262,6 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
       setActionModalVisible(false);
       setNote('');
       setImages([]);
-      if (activeTab === 'details') setActiveTab('work');
 
     } catch (error) {
       console.error("Update failed", error);
@@ -343,8 +343,10 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
               complaints={data}
               darkMode={darkMode}
               onComplaintSelect={(complaint) => {
-                setSelectedItem(complaint);
-                setActiveTab('details');
+                navigation.navigate('AuthorityComplaintDetail', {
+                  complaintId: complaint.id,
+                  initialData: complaint // Pass current data for instant loading
+                });
               }}
             />
           </View>
@@ -356,7 +358,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
             style={{ flex: 1 }}
             renderItem={({ item }) => (
               <View style={[styles.workCard, darkMode && styles.cardDark]}>
-                <TouchableOpacity onPress={() => { setSelectedItem(item); setActiveTab('details'); }}>
+                <TouchableOpacity onPress={() => navigation.navigate('AuthorityComplaintDetail', { complaintId: item.id, initialData: item })}>
                   <Text style={[styles.workTitle, darkMode && styles.textWhite]} numberOfLines={1}>{item.title}</Text>
                   <Text style={styles.workLoc}>{item.location} • {item.ward}</Text>
                 </TouchableOpacity>
@@ -370,33 +372,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
     );
   };
 
-  const renderDetails = () => (
-    <ScrollView style={{ flex: 1 }} bounces={false}>
-      <View style={styles.detailHeader}>
-        <TouchableOpacity onPress={() => setActiveTab('work')} style={styles.backButton}><ArrowLeft size={24} color="white" /></TouchableOpacity>
-        <Text style={styles.detailHeaderTitle}>Complaint #{selectedItem.id}</Text>
-      </View>
-      <Image source={{ uri: selectedItem.citizenProof }} style={styles.heroImage} />
-      <View style={[styles.detailCard, darkMode && styles.cardDark]}>
-        <Text style={[styles.detailTitle, darkMode && styles.textWhite]}>{selectedItem.title}</Text>
-        <View style={styles.detailLocRow}>
-          <MapPin size={16} color="#6B7280" />
-          <Text style={styles.detailLocText}>{selectedItem.location} • {selectedItem.ward}</Text>
-          <TouchableOpacity 
-            style={styles.mapsButton}
-            onPress={() => openGoogleMaps(selectedItem.latitude, selectedItem.longitude)}
-          >
-            <Map size={16} color="white" />
-            <Text style={styles.mapsButtonText}>Maps</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={[styles.detailDesc, darkMode && styles.textGray]}>{selectedItem.description}</Text>
-        <View style={styles.cardDivider} />
-        <Text style={styles.sectionLabel}>Administrative Actions</Text>
-        <ActionButtons item={selectedItem} />
-      </View>
-    </ScrollView>
-  );
+
 
   const renderLedger = () => {
     const filteredData = complaints.filter(item => {
@@ -484,7 +460,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
                   darkMode && styles.cardDark,
                   { borderLeftWidth: 4, borderLeftColor: colors.border }
                 ]}
-                onPress={() => { setSelectedItem(item); setActiveTab('details'); }}
+                onPress={() => navigation.navigate('AuthorityComplaintDetail', { complaintId: item.id, initialData: item })}
               >
                 <View style={{ flex: 1 }}>
                   <View style={styles.rowTop}>
@@ -500,44 +476,45 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
                 </View>
               </TouchableOpacity>
             );
-          }}
+          }
+          }
         />
-      </View>
+      </View >
     );
   };
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
-            {/* Company Selection Modal */}
-            <RNModal
-              visible={companyModalVisible}
-              transparent
-              animationType="slide"
-              onRequestClose={() => {}}
-            >
-              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
-                <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 24, width: '85%' }}>
-                  <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Your Department</Text>
-                  <ScrollView style={{ maxHeight: 300 }}>
-                    {companies.map((company) => (
-                      <TouchableOpacity
-                        key={company.id}
-                        style={{ padding: 14, borderBottomWidth: 1, borderBottomColor: '#eee' }}
-                        onPress={() => handleCompanySelect(company.id)}
-                      >
-                        <Text style={{ fontSize: 16 }}>{company.name}</Text>
-                        {company.description ? (
-                          <Text style={{ fontSize: 12, color: '#888' }}>{company.description}</Text>
-                        ) : null}
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                  <TouchableOpacity style={{ marginTop: 18, alignSelf: 'flex-end' }} onPress={() => setCompanyModalVisible(false)}>
-                    <Text style={{ color: '#1E88E5', fontWeight: 'bold' }}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </RNModal>
+      {/* Company Selection Modal */}
+      <RNModal
+        visible={companyModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { }}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: 'white', borderRadius: 16, padding: 24, width: '85%' }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 16 }}>Select Your Department</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              {companies.map((company) => (
+                <TouchableOpacity
+                  key={company.id}
+                  style={{ padding: 14, borderBottomWidth: 1, borderBottomColor: '#eee' }}
+                  onPress={() => handleCompanySelect(company.id)}
+                >
+                  <Text style={{ fontSize: 16 }}>{company.name}</Text>
+                  {company.description ? (
+                    <Text style={{ fontSize: 12, color: '#888' }}>{company.description}</Text>
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={{ marginTop: 18, alignSelf: 'flex-end' }} onPress={() => setCompanyModalVisible(false)}>
+              <Text style={{ color: '#1E88E5', fontWeight: 'bold' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </RNModal>
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
 
       <View style={{ flex: 1, paddingBottom: 85 }}>
@@ -587,7 +564,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
               </View>
               <View style={[styles.statBox, darkMode && styles.cardDark]}>
                 <Text style={styles.statSub}>Resolved</Text>
-                <Text style={[styles.statNum, { color: '#10B981' }]}> 
+                <Text style={[styles.statNum, { color: '#10B981' }]}>
                   {complaints.filter(c => c.status === 'Resolved' || c.status === 'Completed').length}
                 </Text>
               </View>
@@ -598,7 +575,6 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
             </TouchableOpacity>
           </ScrollView>
         )}
-        {activeTab === 'details' && renderDetails()}
       </View>
 
       {/* Filter Modal */}

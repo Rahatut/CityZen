@@ -2,9 +2,15 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configure base URL: prefer EXPO env, fallback to dev/prod defaults
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
-  ? process.env.EXPO_PUBLIC_API_URL
-  : (__DEV__ ? 'http://localhost:3000/api' : 'https://your-production-url.com/api');
+const getBaseUrl = () => {
+  let url = process.env.EXPO_PUBLIC_API_URL || (__DEV__ ? 'http://localhost:3000' : 'https://your-production-url.com');
+  if (!url.endsWith('/api')) {
+    url += '/api';
+  }
+  return url;
+};
+
+const API_BASE_URL = getBaseUrl();
 
 // Create axios instance
 const api = axios.create({
@@ -42,7 +48,7 @@ api.interceptors.response.use(
       // Don't clear for other endpoints that might return 401 for different reasons
       const isAuthEndpoint = error.config?.url?.includes('/auth/');
       const isTokenExpired = error.response?.data?.message?.toLowerCase().includes('token');
-      
+
       if (isAuthEndpoint || isTokenExpired) {
         await AsyncStorage.removeItem('userToken');
         await AsyncStorage.removeItem('userData');

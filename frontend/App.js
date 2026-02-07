@@ -33,6 +33,8 @@ import CameraScreen from './src/screens/CameraScreen';
 import SubmitComplaintDetailsScreen from './src/screens/SubmitComplaintDetailsScreen';
 import SubmittedComplaintScreen from './src/screens/SubmittedComplaintScreen';
 import UserComplaintListScreen from './src/screens/UserComplaintListScreen';
+import AuthorityComplaintListScreen from './src/screens/AuthorityComplaintListScreen';
+import AuthorityComplaintDetailScreen from './src/screens/AuthorityComplaintDetailScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import LandingScreen from './src/screens/LandingScreen';
 import SimilarComplaintsScreen from './src/screens/SimilarComplaintsScreen';
@@ -47,22 +49,22 @@ export default function App() {
     <ComplaintProvider>
       <NotificationProvider>
         <NavigationContainer ref={(ref) => {
-            // Dirty hack to access navigation from context without deep passing
-            // Ideally we'd use a navigation service, but this works for the context injection pattern
-            if (ref) {
-              // We need a way to pass this ref to the context. 
-              // Since NotificationProvider is inside, we can't pass it as prop easily unless we restructure.
-              // Actually, we can use a ref + useEffect inside the provider if we move NavigationContainer *inside* Provider?
-              // No, Provider needs to be outside to show Toast *over* everything.
-              // But NavigationContainer needs to be ready.
-              // Let's use a "NavigationAware" component inside.
-            }
-          }}>
+          // Dirty hack to access navigation from context without deep passing
+          // Ideally we'd use a navigation service, but this works for the context injection pattern
+          if (ref) {
+            // We need a way to pass this ref to the context. 
+            // Since NotificationProvider is inside, we can't pass it as prop easily unless we restructure.
+            // Actually, we can use a ref + useEffect inside the provider if we move NavigationContainer *inside* Provider?
+            // No, Provider needs to be outside to show Toast *over* everything.
+            // But NavigationContainer needs to be ready.
+            // Let's use a "NavigationAware" component inside.
+          }
+        }}>
           <NavigationAware />
           <StatusBar barStyle={darkMode ? "light-content" : "dark-content"} backgroundColor={darkMode ? "#1F2937" : "#FFFFFF"} />
-          <Stack.Navigator 
-            initialRouteName="Landing" 
-            screenOptions={{ 
+          <Stack.Navigator
+            initialRouteName="Landing"
+            screenOptions={{
               headerShown: false,
               animation: 'simple_push',
               contentStyle: { backgroundColor: darkMode ? '#111827' : '#F9FAFB' },
@@ -70,28 +72,28 @@ export default function App() {
               gestureDirection: 'horizontal',
             }}
           >
-            <Stack.Screen 
-              name="Landing" 
+            <Stack.Screen
+              name="Landing"
               options={{ animation: 'fade' }}
             >
               {(props) => <LandingScreen {...props} darkMode={darkMode} />}
             </Stack.Screen>
-            <Stack.Screen 
-              name="Login" 
+            <Stack.Screen
+              name="Login"
               options={{ animation: 'slide_from_bottom' }}
             >
               {(props) => <LoginScreen {...props} onLogin={() => props.navigation.replace('HomeScreen')} />}
             </Stack.Screen>
-            <Stack.Screen 
-              name="Signup" 
+            <Stack.Screen
+              name="Signup"
               options={{ animation: 'slide_from_bottom' }}
             >
               {(props) => <SignupScreen {...props} onSignup={() => props.navigation.replace('HomeScreen')} />}
             </Stack.Screen>
             <Stack.Screen name="HomeScreen">{(props) => <HomeScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="Feed">{(props) => <FeedScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
-            <Stack.Screen 
-              name="Camera" 
+            <Stack.Screen
+              name="Camera"
               options={{ animation: 'slide_from_bottom' }}
             >
               {(props) => <CameraScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}
@@ -105,6 +107,8 @@ export default function App() {
             <Stack.Screen name="Profile">{(props) => <ProfileScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="ComplaintDetails">{(props) => <ComplaintDetailsScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="AuthorityDashboard">{(props) => <AuthorityDashboardScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
+            <Stack.Screen name="AuthorityComplaintList">{(props) => <AuthorityComplaintListScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
+            <Stack.Screen name="AuthorityComplaintDetail">{(props) => <AuthorityComplaintDetailScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="AdminDashboard">{(props) => <AdminDashboardScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
           </Stack.Navigator>
         </NavigationContainer>

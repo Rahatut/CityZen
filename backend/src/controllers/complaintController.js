@@ -38,7 +38,7 @@ exports.createComplaint = async (req, res) => {
     });
 
     if (user && user.Citizen && user.Citizen.isBanned) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         message: 'Your account has been banned. You cannot submit complaints.',
         banned: true,
         banReason: user.Citizen.banReason,
@@ -519,8 +519,42 @@ exports.getComplaintsByCitizen = async (req, res) => {
       offset: parseInt(offset),
     });
 
+    const bucketName = 'cityzen-media';
+    const complaintsWithSignedImages = await Promise.all(
+      rows.map(async (complaint) => {
+        const plainComplaint = complaint.get({ plain: true });
+
+        if (plainComplaint.images && plainComplaint.images.length > 0) {
+          plainComplaint.images = await Promise.all(
+            plainComplaint.images.map(async (img) => {
+              try {
+                const url = img.imageURL;
+                const parsed = new URL(url);
+                const path = parsed.pathname || '';
+                const marker = `/${bucketName}/`;
+                const idx = path.indexOf(marker);
+                const objectPath = idx >= 0 ? path.slice(idx + marker.length) : null;
+                if (objectPath) {
+                  const { data, error } = await supabase.storage
+                    .from(bucketName)
+                    .createSignedUrl(objectPath, 60 * 60);
+                  if (!error && data?.signedUrl) {
+                    img.imageURL = data.signedUrl;
+                  }
+                }
+              } catch (e) {
+                // keep original URL on failure
+              }
+              return img;
+            })
+          );
+        }
+        return plainComplaint;
+      })
+    );
+
     res.json({
-      complaints: rows,
+      complaints: complaintsWithSignedImages,
       pagination: {
         total: count,
         page: parseInt(page),
@@ -598,8 +632,42 @@ exports.getComplaintsByAuthority = async (req, res) => {
       offset: parseInt(offset),
     });
 
+    const bucketName = 'cityzen-media';
+    const complaintsWithSignedImages = await Promise.all(
+      rows.map(async (complaint) => {
+        const plainComplaint = complaint.get({ plain: true });
+
+        if (plainComplaint.images && plainComplaint.images.length > 0) {
+          plainComplaint.images = await Promise.all(
+            plainComplaint.images.map(async (img) => {
+              try {
+                const url = img.imageURL;
+                const parsed = new URL(url);
+                const path = parsed.pathname || '';
+                const marker = `/${bucketName}/`;
+                const idx = path.indexOf(marker);
+                const objectPath = idx >= 0 ? path.slice(idx + marker.length) : null;
+                if (objectPath) {
+                  const { data, error } = await supabase.storage
+                    .from(bucketName)
+                    .createSignedUrl(objectPath, 60 * 60);
+                  if (!error && data?.signedUrl) {
+                    img.imageURL = data.signedUrl;
+                  }
+                }
+              } catch (e) {
+                // keep original URL on failure
+              }
+              return img;
+            })
+          );
+        }
+        return plainComplaint;
+      })
+    );
+
     res.json({
-      complaints: rows,
+      complaints: complaintsWithSignedImages,
       pagination: {
         total: count,
         page: parseInt(page),
