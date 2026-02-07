@@ -103,11 +103,21 @@ export const authAPI = {
 export const complaintAPI = {
   checkDuplicate: async (latitude, longitude, categoryId) => {
     try {
-      const response = await api.post('/complaints/check-duplicate', {
+      const response = await api.post('/api/complaints/check-duplicate', {
         latitude,
         longitude,
         categoryId,
       });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || { message: 'Network error' };
+    }
+  },
+
+  getCategories: async () => {
+    try {
+      // console.log('Sending categories request to:', api.defaults.baseURL + '/complaints/categories');
+      const response = await api.get('/api/complaints/categories');
       return response.data;
     } catch (error) {
       throw error.response?.data || { message: 'Network error' };

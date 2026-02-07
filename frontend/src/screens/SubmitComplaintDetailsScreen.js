@@ -46,6 +46,24 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
 
     const [categories, setCategories] = useState([]);
 
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const response = await axios.get(`${API_URL}/api/complaints/categories`, {
+                    timeout: 30000, // 30-second timeout
+                    headers: {
+                        'bypass-tunnel-reminder': 'true'
+                    }
+                });
+                setCategories(response.data);
+            } catch (error) {
+                console.error('Error fetching categories:', error);
+                Alert.alert('Error', 'Failed to load categories.');
+            }
+        };
+        fetchCategories();
+    }, []);
+
     // Dropdown State
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -93,6 +111,22 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         runAllDetections();
     }, [images]);
 
+    useEffect(() => {
+        //If location is not already set, fetch it.
+        if (!location) {
+            handleGPSDetect();
+        }
+    }, []);
+
+    useEffect(() => {
+      if (images.length === 0) {
+        setAiResult(null);
+        lastGenerationKeyRef.current = null;
+        return;
+        }
+    }, [images]);
+
+    // Re-inserting the useEffect for generateComplaintText
     useEffect(() => {
         if (!aiResult) return;
         if (aiResult.confidence < CONFIDENCE_THRESHOLD) return;
@@ -166,72 +200,18 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         checkDuplicate();
     }, [location, selectedCategory]);
 
-
-
-    useEffect(() => {
-        const fetchCategories = async () => {
-            try {
-                const response = await axios.get(`${API_URL}/api/complaints/categories`, {
-                    timeout: 30000, // 30-second timeout
-                    headers: {
-                        'bypass-tunnel-reminder': 'true'
-                    }
-                });
-                setCategories(response.data);
-            } catch (error) {
-                console.error('Error fetching categories:', error);
-                Alert.alert('Error', 'Failed to load categories.');
-            }
-        };
-        fetchCategories();
-    }, []);
-
     useEffect(() => {
         if (!aiResult) return;
         if (aiResult.confidence < CONFIDENCE_THRESHOLD) return;
         if (categories.length === 0) return;
 
-        let searchString = "";
+        // Directly use aiResult.id to find the matching category
+        const matchedCategory = categories.find(cat => cat.id === aiResult.id);
 
-        // Decide what to search in categories based on AI label
-        if (aiResult.label.toLowerCase() === "pothole") {
-            searchString = "road";
-        } else if (aiResult.label.toLowerCase() === "open manhole") {
-            searchString = "road";
-        } else if (aiResult.label.toLowerCase() === "waterlogging") {
-            searchString = "water";
-        } else if (aiResult.label.toLowerCase() === "garbage") {
-            searchString = "garbage";
-        } else if (aiResult.label.toLowerCase() === "broken road") {
-            searchString = "road";
-        } 
-
-        if (searchString) {
-            const matchedCategory = categories.find(cat =>
-                cat.name.toLowerCase().includes(searchString)
-            );
-
-            if (matchedCategory) {
-                setSelectedCategory(matchedCategory);
-            }
+        if (matchedCategory) {
+            setSelectedCategory(matchedCategory);
         }
     }, [aiResult, categories]);
-
-    useEffect(() => {
-        //If location is not already set, fetch it.
-        if (!location) {
-            handleGPSDetect();
-        }
-    }, []);
-
-    useEffect(() => {
-      if (images.length === 0) {
-        setAiResult(null);
-        lastGenerationKeyRef.current = null;
-        return;
-        }
-    }, [images]);      
-
 
 
     //Permissions
@@ -336,7 +316,8 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         });
 
         try {
-            const res = await fetch(`${process.env.EXPO_PUBLIC_AI_SERVICE_URL}/detect_with_llm`, {
+            // Note: The backend route is now responsible for fetching categories and forwarding to OpenRouter
+            const res = await fetch(`${API_URL}/api/ai/detect-with-openrouter`, {
                 method: "POST",
                 body: formData,
             });
@@ -564,7 +545,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
                         </View>
                     )}
 
-                    <                   TouchableOpacity onPress={() => setPrivacyEnabled(!privacyEnabled)} style={styles.privacyRow}>
+                    <TouchableOpacity onPress={() => setPrivacyEnabled(!privacyEnabled)} style={styles.privacyRow}>
                         <View style={[styles.checkbox, privacyEnabled && styles.checkboxActive]}>{privacyEnabled && <CheckCircle size={14} color="white" />}</View>
                         <Text style={[styles.privacyText, darkMode && styles.textGray]}>Blur faces or license plates (Privacy)</Text>
                         <Shield size={16} color="#6B7280" style={{ marginLeft: 'auto' }} />

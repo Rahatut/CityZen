@@ -26,7 +26,7 @@ export default function UserComplaintListScreen({ navigation, route, darkMode, t
             if (!uid && userData.uid && typeof userData.uid === 'string') uid = userData.uid;
             if (!uid) uid = userData.id || userData.uid;
 
-            const response = await api.get(`/complaints/citizen/${uid}`);
+            const response = await api.get(`/api/complaints/citizen/${uid}`);
             let allComplaints = response.data.complaints || [];
 
             if (statusFilter) {
