@@ -3,7 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configure base URL: prefer EXPO env, fallback to dev/prod defaults
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
-  ? process.env.EXPO_PUBLIC_API_URL
+  ? (process.env.EXPO_PUBLIC_API_URL.endsWith('/api')
+    ? process.env.EXPO_PUBLIC_API_URL
+    : `${process.env.EXPO_PUBLIC_API_URL}/api`)
   : (__DEV__ ? 'http://localhost:3000/api' : 'https://your-production-url.com/api');
 
 // Create axios instance
@@ -42,7 +44,7 @@ api.interceptors.response.use(
       // Don't clear for other endpoints that might return 401 for different reasons
       const isAuthEndpoint = error.config?.url?.includes('/auth/');
       const isTokenExpired = error.response?.data?.message?.toLowerCase().includes('token');
-      
+
       if (isAuthEndpoint || isTokenExpired) {
         await AsyncStorage.removeItem('userToken');
         await AsyncStorage.removeItem('userData');
@@ -103,7 +105,7 @@ export const authAPI = {
 export const complaintAPI = {
   checkDuplicate: async (latitude, longitude, categoryId) => {
     try {
-      const response = await api.post('/api/complaints/check-duplicate', {
+      const response = await api.post('/complaints/check-duplicate', {
         latitude,
         longitude,
         categoryId,
@@ -117,7 +119,7 @@ export const complaintAPI = {
   getCategories: async () => {
     try {
       // console.log('Sending categories request to:', api.defaults.baseURL + '/complaints/categories');
-      const response = await api.get('/api/complaints/categories');
+      const response = await api.get('/complaints/categories');
       return response.data;
     } catch (error) {
       throw error.response?.data || { message: 'Network error' };
