@@ -20,12 +20,12 @@ exports.registerProfile = async (req, res) => {
 
     // 2. Create role-specific profile based on the role submitted from the form
     if (role === 'citizen') {
-      if (!ward) throw new Error('Citizen signup requires a Ward/Area.');
-      await Citizen.create({ UserFirebaseUid: firebaseUid, ward }, { transaction: t });
+      // ward is optional/removed
+      await Citizen.create({ UserFirebaseUid: firebaseUid }, { transaction: t });
     } else if (role === 'authority') {
-      if (!authorityCompanyId || !ward) throw new Error('Authority signup requires Department selection and Ward.');
+      if (!authorityCompanyId) throw new Error('Authority signup requires Department selection.');
       // Optionally, department name can be stored for display, but authorityCompanyId is the main mapping
-      await Authority.create({ UserFirebaseUid: firebaseUid, authorityCompanyId, department, ward }, { transaction: t });
+      await Authority.create({ UserFirebaseUid: firebaseUid, authorityCompanyId, department }, { transaction: t });
     } else if (role === 'admin') {
       // Allow admin signup with any provided code
       await Admin.create({ UserFirebaseUid: firebaseUid }, { transaction: t });

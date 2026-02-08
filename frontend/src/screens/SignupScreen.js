@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, Text, TextInput, TouchableOpacity, ScrollView, 
+import {
+  View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, Alert,
   ActivityIndicator
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { 
-  User, Mail, Lock, MapPin, Building2, ShieldCheck, 
-  CheckSquare, Square, Briefcase, Key, CheckCircle 
+import {
+  User, Mail, Lock, MapPin, Building2, ShieldCheck,
+  CheckSquare, Square, Briefcase, Key, CheckCircle
 } from 'lucide-react-native';
 import axios from 'axios';
 import { auth } from '../config/firebase';
@@ -30,7 +30,7 @@ export default function SignupScreen({ navigation }) {
     email: '',
     password: '',
     confirmPassword: '',
-    ward: '',
+
     department: '',
     authorityCompanyId: '',
     adminCode: '',
@@ -86,7 +86,7 @@ export default function SignupScreen({ navigation }) {
         role,
         fullName: formData.fullName,
         email: formData.email,
-        ward: formData.ward,
+
         department: formData.department,
         authorityCompanyId: role === 'authority' ? formData.authorityCompanyId : undefined,
         adminCode: formData.adminCode,
@@ -132,9 +132,9 @@ export default function SignupScreen({ navigation }) {
               {r.charAt(0).toUpperCase() + r.slice(1)}
             </Text>
             <Text style={styles.roleDesc}>
-              {r === 'citizen' ? 'Report issues & track progress.' : 
-               r === 'authority' ? 'Resolve complaints in your area.' : 
-               'Manage users and moderation.'}
+              {r === 'citizen' ? 'Report issues & track progress.' :
+                r === 'authority' ? 'Resolve complaints in your area.' :
+                  'Manage users and moderation.'}
             </Text>
           </View>
         </TouchableOpacity>
@@ -186,12 +186,7 @@ export default function SignupScreen({ navigation }) {
         <TextInput style={styles.input} placeholder={role === 'authority' ? "Official Email / ID" : "Email Address"} keyboardType="email-address" onChangeText={t => setFormData({ ...formData, email: t })} />
       </View>
 
-      {role !== 'admin' && (
-        <View style={styles.inputWrapper}>
-          <MapPin size={20} color="#9CA3AF" />
-          <TextInput style={styles.input} placeholder="Ward / Area" onChangeText={t => setFormData({ ...formData, ward: t })} />
-        </View>
-      )}
+
 
       <View style={styles.inputWrapper}>
         <Lock size={20} color="#9CA3AF" />
@@ -216,8 +211,8 @@ export default function SignupScreen({ navigation }) {
         {loading ? <ActivityIndicator color="white" /> : <Text style={styles.submitBtnText}>Sign Up</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => setStep(1)} style={{alignItems: 'center', marginTop: 16}} disabled={loading}>
-        <Text style={{color: '#6B7280'}}>Back to Role Selection</Text>
+      <TouchableOpacity onPress={() => setStep(1)} style={{ alignItems: 'center', marginTop: 16 }} disabled={loading}>
+        <Text style={{ color: '#6B7280' }}>Back to Role Selection</Text>
       </TouchableOpacity>
     </View>
   );
