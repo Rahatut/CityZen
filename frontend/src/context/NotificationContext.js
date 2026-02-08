@@ -71,7 +71,7 @@ export const NotificationProvider = ({ children }) => {
     const loadAdminHistory = async (isUserAdmin) => {
         // CRITICAL: Only load admin history if user is actually an admin
         if (!isUserAdmin) {
-            console.log('NotificationContext: Skipping admin history load - user is not admin');
+            //console.log('NotificationContext: Skipping admin history load - user is not admin');
             setAdminHistory([]);
             return;
         }
@@ -110,9 +110,9 @@ export const NotificationProvider = ({ children }) => {
                 const loaded = JSON.parse(countsStr);
                 setLastCounts(loaded);
                 lastCountsRef.current = loaded; // CRITICAL: Update ref immediately
-                console.log('NotificationContext: Loaded admin last counts:', loaded);
+                //console.log('NotificationContext: Loaded admin last counts:', loaded);
             } else {
-                console.log('NotificationContext: No previous admin counts found');
+                //console.log('NotificationContext: No previous admin counts found');
             }
         } catch (e) {
             console.error('Failed to load admin last counts', e);
@@ -177,7 +177,7 @@ export const NotificationProvider = ({ children }) => {
                 const count = parseInt(countStr);
                 setLastAssignmentCount(count);
                 lastAssignmentCountRef.current = count;
-                console.log('NotificationContext: Loaded last assignment count:', count, 'for company:', companyId);
+                //console.log('NotificationContext: Loaded last assignment count:', count, 'for company:', companyId);
             } else {
                 console.log('NotificationContext: No previous assignment count found for company:', companyId);
                 setLastAssignmentCount(0);
@@ -247,12 +247,13 @@ export const NotificationProvider = ({ children }) => {
 
                     // Check if user is admin - CRITICAL: Always update this state
                     const adminStatus = role === 'admin';
-                    console.log('NotificationContext: Setting admin status - role:', role, 'adminStatus:', adminStatus);
+                    //console.log('NotificationContext: Setting admin status - role:', role, 'adminStatus:', adminStatus);
                     setIsAdmin(adminStatus);
 
                     // Check if user is authority
                     const authorityStatus = role === 'authority';
                     setIsAuthority(authorityStatus);
+<<<<<<< HEAD
                     console.log('NotificationContext: Authority check - role:', role, 'authorityStatus:', authorityStatus);
 
                     if (authorityStatus) {
@@ -270,9 +271,18 @@ export const NotificationProvider = ({ children }) => {
                             await loadLastAssignmentCount(compId);
                             await loadLastForwardedMap(compId);
                         }
+=======
+                    //console.log('NotificationContext: Authority check - role:', role, 'authorityStatus:', authorityStatus, 'userData.id:', userData.id);
+                    
+                    if (authorityStatus && userData.id) {
+                        //console.log('NotificationContext: Setting up authority with ID:', userData.id);
+                        setAuthorityCompanyId(userData.id);
+                        await loadAuthorityHistory(userData.id);
+                        await loadLastAssignmentCount(userData.id);
+>>>>>>> 9db76f67411cbb0cdf8fca0c35441e451808bfa1
                     } else {
                         // Clear authority data for non-authority users
-                        console.log('NotificationContext: Clearing authority data');
+                        //console.log('NotificationContext: Clearing authority data');
                         setAuthorityHistory([]);
                         setLastAssignmentCount(0);
                         setLastForwardedMap({});
@@ -304,13 +314,13 @@ export const NotificationProvider = ({ children }) => {
             const unauthenticatedScreens = ['Landing', 'Login', 'Signup'];
 
             if (unauthenticatedScreens.includes(currentRoute)) {
-                console.log("NotificationContext: Skipping polling on", currentRoute, "screen");
+                //console.log("NotificationContext: Skipping polling on", currentRoute, "screen");
                 return;
             }
 
             const userDataStr = await AsyncStorage.getItem('userData');
             if (!userDataStr) {
-                console.log("NotificationContext: No userData in storage");
+                //console.log("NotificationContext: No userData in storage");
                 return;
             }
 
@@ -319,7 +329,7 @@ export const NotificationProvider = ({ children }) => {
             // CRITICAL: Only poll complaints for citizens
             const role = userData.role || 'citizen';
             if (role !== 'citizen') {
-                console.log("NotificationContext: Skipping complaint polling - user is", role);
+                //console.log("NotificationContext: Skipping complaint polling - user is", role);
                 return;
             }
 
@@ -329,15 +339,15 @@ export const NotificationProvider = ({ children }) => {
             if (!uid) uid = userData.id || userData.uid;
 
             if (!uid) {
-                console.log("NotificationContext: No UID found in userData");
+                //console.log("NotificationContext: No UID found in userData");
                 return;
             }
 
-            console.log("NotificationContext: Polling for user:", uid);
+            // console.log("NotificationContext: Polling for user:", uid);
 
-            const response = await api.get(`/complaints/citizen/${uid}`);
+            const response = await api.get(`/api/complaints/citizen/${uid}`);
             const complaints = response.data.complaints || [];
-            console.log("NotificationContext: Fetched", complaints.length, "complaints");
+            //console.log("NotificationContext: Fetched", complaints.length, "complaints");
 
             // Check for status changes using ref to avoid stale closure
             const newStatuses = {};
@@ -348,7 +358,7 @@ export const NotificationProvider = ({ children }) => {
 
                 // If we have a previous status and it's different
                 if (lastStatusesRef.current[c.id] && lastStatusesRef.current[c.id] !== c.currentStatus) {
-                    console.log(`NotificationContext: Status changed for complaint ${c.id}: ${lastStatusesRef.current[c.id]} -> ${c.currentStatus}`);
+                    //console.log(`NotificationContext: Status changed for complaint ${c.id}: ${lastStatusesRef.current[c.id]} -> ${c.currentStatus}`);
                     changedComplaint = c;
                 }
             });
@@ -400,14 +410,14 @@ export const NotificationProvider = ({ children }) => {
     useEffect(() => {
         if (!currentUid) return; // Don't start polling until user is loaded
 
-        console.log("NotificationContext: Starting polling for user:", currentUid);
+        //console.log("NotificationContext: Starting polling for user:", currentUid);
         // Initial fetch
         fetchComplaints();
 
         // Poll every 10 seconds (reduced from 30 for faster notifications)
         const interval = setInterval(fetchComplaints, 10000);
         return () => {
-            console.log("NotificationContext: Stopping polling");
+            //console.log("NotificationContext: Stopping polling");
             clearInterval(interval);
         };
     }, [currentUid]); // Re-run when user changes
@@ -421,11 +431,11 @@ export const NotificationProvider = ({ children }) => {
                 const userData = JSON.parse(userDataStr);
                 const role = userData.role || 'citizen';
                 if (role !== 'admin') {
-                    console.log('AdminPolling: Skipping - user role is', role, 'not admin');
+                    //console.log('AdminPolling: Skipping - user role is', role, 'not admin');
                     return;
                 }
             } else {
-                console.log('AdminPolling: Skipping - no user data');
+                //console.log('AdminPolling: Skipping - no user data');
                 return;
             }
 
@@ -434,7 +444,7 @@ export const NotificationProvider = ({ children }) => {
             const unauthenticatedScreens = ['Landing', 'Login', 'Signup'];
 
             if (unauthenticatedScreens.includes(currentRoute)) {
-                console.log('AdminPolling: Skipping - on unauthenticated screen:', currentRoute);
+                //console.log('AdminPolling: Skipping - on unauthenticated screen:', currentRoute);
                 return;
             }
 

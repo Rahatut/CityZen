@@ -21,7 +21,6 @@ const AuthorityCompanyCategory = sequelize.define('AuthorityCompanyCategory', {
     }
   }
 }, {
-  tableName: 'authoritycompanycategories',
   timestamps: false
 });
 

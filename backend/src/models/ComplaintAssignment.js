@@ -1,12 +1,14 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
+const Complaint = require('./Complaint');
+const AuthorityCompany = require('./AuthorityCompany');
 
 const ComplaintAssignment = sequelize.define('ComplaintAssignment', {
   complaintId: {
     type: DataTypes.INTEGER,
     primaryKey: true,
     references: {
-      model: 'Complaints', // table name
+      model: Complaint,
       key: 'id'
     }
   },
@@ -14,7 +16,7 @@ const ComplaintAssignment = sequelize.define('ComplaintAssignment', {
     type: DataTypes.INTEGER,
     primaryKey: true,
     references: {
-      model: 'AuthorityCompanies', // table name
+      model: AuthorityCompany,
       key: 'id'
     }
   }

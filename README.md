@@ -163,6 +163,7 @@ pip install ultralytics
 pip install python-dotenv
 pip install openrouter
 pip install openai
+pip install python-multipart
 # other packages may be required later
 ```
 

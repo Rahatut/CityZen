@@ -27,7 +27,7 @@ async function startServer() {
         logger.info("Database connection successful");
 
         // Sync models
-        await sequelize.sync({ alter: true });
+        await sequelize.sync({ force: false });
         logger.info("Models synced");
 
         // Run the seeding logic

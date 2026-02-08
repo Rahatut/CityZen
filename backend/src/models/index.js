@@ -19,7 +19,8 @@ const ComplaintReport = require('./ComplaintReport');
 User.hasOne(Citizen, {
   foreignKey: {
     name: 'UserFirebaseUid',
-    allowNull: false
+    allowNull: false,
+    unique: true
   },
   onDelete: 'CASCADE'
 });
@@ -29,7 +30,8 @@ Citizen.belongsTo(User);
 User.hasOne(Authority, {
   foreignKey: {
     name: 'UserFirebaseUid',
-    allowNull: false
+    allowNull: false,
+    unique: true
   },
   onDelete: 'CASCADE'
 });
@@ -42,7 +44,8 @@ AuthorityCompany.hasMany(Authority, { foreignKey: 'authorityCompanyId' });
 User.hasOne(Admin, {
   foreignKey: {
     name: 'UserFirebaseUid',
-    allowNull: false
+    allowNull: false,
+    unique: true
   },
   onDelete: 'CASCADE'
 });
