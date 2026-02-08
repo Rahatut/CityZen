@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
-import { Search, MapPin, Heart, AlertCircle, Filter, SlidersHorizontal, X } from 'lucide-react-native';
+import { Search, MapPin, Heart, AlertCircle, Filter, SlidersHorizontal, X, Camera } from 'lucide-react-native';
 import axios from 'axios';
 import api from '../services/api';
 
@@ -388,6 +388,13 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                   <Text style={[styles.actionText, { marginLeft: 4, color: item.upvotes > 0 ? "#EF4444" : "#6B7280" }]}>
                     {item.upvotes || 0} upvotes
                   </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => navigation.navigate('AddEvidence', { complaintId: item.id })}
+                >
+                  <Camera size={16} color="#6B7280" />
+                  <Text style={[styles.actionText, { marginLeft: 4, color: "#6B7280" }]}>Add Evidence</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionButton}

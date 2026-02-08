@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput, KeyboardAvoidingView } from 'react-native';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
-import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle, Camera, X } from 'lucide-react-native';
+import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle, Camera, X, Plus } from 'lucide-react-native';
 
 import axios from 'axios';
 
@@ -198,38 +199,44 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   };
 
 
-  useEffect(() => {
-    const fetchComplaint = async () => {
-      if (!complaintIdToFetch) {
-        setError('No complaint ID provided');
-        setLoading(false);
-        return;
-      }
-      try {
-        setError(null);
-        // We need to pass citizenUid to get correct upvote status if backend supports it (next step)
-        // For now, just basic fetch
-        const response = await axios.get(`${API_URL}/api/complaints/${complaintIdToFetch}`, {
-          headers: { 'bypass-tunnel-reminder': 'true' },
-          timeout: 10000,
-        });
-        setComplaint(response.data);
-        setUpvotes(response.data.upvotes || 0); // Initialize upvotes
-        setRating(response.data.rating || 0);
+  const fetchComplaint = useCallback(async () => {
+    if (!complaintIdToFetch) {
+      setError('No complaint ID provided');
+      setLoading(false);
+      return;
+    }
+    setLoading(true); // Set loading to true each time we fetch
+    try {
+      setError(null);
+      const response = await axios.get(`${API_URL}/api/complaints/${complaintIdToFetch}`, {
+        headers: { 'bypass-tunnel-reminder': 'true' },
+        timeout: 10000,
+      });
+      setComplaint(response.data);
+      setUpvotes(response.data.upvotes || 0);
+      setRating(response.data.rating || 0);
 
-      } catch (err) {
-        console.error('Error fetching complaint:', err);
-        let message = 'Failed to load complaint details';
-        if (err.code === 'ECONNABORTED') message = 'Network timeout. Please check your connection.';
-        else if (err.message === 'Network Error') message = 'Network error. Please check your connection.';
-        else if (err.response?.status === 404) message = 'Complaint not found.';
-        setError(message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchComplaint();
-  }, [complaintIdToFetch, retryTick]);
+    } catch (err) {
+      console.error('Error fetching complaint:', err);
+      let message = 'Failed to load complaint details';
+      if (err.code === 'ECONNABORTED') message = 'Network timeout. Please check your connection.';
+      else if (err.message === 'Network Error') message = 'Network error. Please check your connection.';
+      else if (err.response?.status === 404) message = 'Complaint not found.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [complaintIdToFetch]); // Depend on complaintIdToFetch
+
+  useEffect(() => {
+    fetchComplaint(); // Initial fetch
+  }, [fetchComplaint, retryTick]); // Add fetchComplaint to dependency array
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchComplaint(); // Re-fetch data when the screen comes into focus
+    }, [fetchComplaint])
+  );
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
@@ -279,6 +286,24 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
             </View>
           </View>
 
+          {/* Citizen Added Evidence */}
+          {complaint?.images?.filter(img => img.type !== 'progress' && img.type !== 'resolution' && img.type !== 'appeal').length > 0 && (
+            <View style={[styles.card, darkMode && styles.cardDark, {position: 'relative'}]}>
+              <Text style={[styles.sectionHeader, darkMode && styles.textWhite]}>Added Evidences</Text>
+              <TouchableOpacity
+                style={styles.addEvidencePlusButton}
+                onPress={() => navigation.navigate('AddEvidence', { complaintId: complaintIdToFetch })}
+              >
+                <Plus size={12} color="white" />
+              </TouchableOpacity>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {complaint.images.filter(img => img.type !== 'progress' && img.type !== 'resolution' && img.type !== 'appeal').map((img, idx) => (
+                  <Image key={idx} source={{ uri: img.imageURL }} style={{ width: 120, height: 120, borderRadius: 8, marginRight: 10 }} />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           {/* Remarks & Evidence */}
           {(complaint?.statusNotes || (complaint?.images && complaint?.images.length > 0)) && (
             <View style={[styles.card, darkMode && styles.cardDark]}>
@@ -293,7 +318,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
                 </View>
               ) : null}
 
-              {complaint?.images?.filter(img => img.type === 'progress' || img.type === 'resolution' || (img.type === undefined && complaint.images.indexOf(img) > 0)).length > 0 && (
+              {complaint?.images?.filter(img => img.type === 'progress' || img.type === 'resolution').length > 0 && (
                 <View>
                   <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 8 }]}>WORK EVIDENCE</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -463,6 +488,15 @@ const styles = StyleSheet.create({
   cardDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
   title: { fontSize: 22, fontWeight: 'bold', color: '#1F2937', marginBottom: 8 },
   sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
+  addEvidencePlusButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: '#9CA3AF', 
+    borderRadius: 20, 
+    padding: 8, 
+    zIndex: 1,
+  },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
   description: { color: '#4B5563', lineHeight: 22, marginBottom: 20 },
   actionsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 12 },

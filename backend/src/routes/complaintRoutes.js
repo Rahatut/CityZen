@@ -67,4 +67,7 @@ router.post('/complaints/:id/report', complaintController.reportComplaint);
 // Delete complaint
 router.delete('/complaints/:id', complaintController.deleteComplaint);
 
+// Add evidence to complaint (new route)
+router.post('/complaints/:id/evidence', upload.array('images'), complaintController.addEvidenceToComplaint);
+
 module.exports = router;
