@@ -181,7 +181,6 @@ export default function AuthorityComplaintListScreen({ navigation, route, onLogo
                   <th>ID</th>
                   <th>Title</th>
                   <th>Status</th>
-                  <th>Ward</th>
                   <th>Date Submitted</th>
                 </tr>
               </thead>
@@ -195,7 +194,6 @@ export default function AuthorityComplaintListScreen({ navigation, route, onLogo
                       <td>#${complaint.id}</td>
                       <td>${complaint.title || 'N/A'}</td>
                       <td class="${statusClass}">${status.replace('_', ' ').toUpperCase()}</td>
-                      <td>${complaint.ward || 'Unknown'}</td>
                       <td>${new Date(complaint.createdAt).toLocaleDateString()}</td>
                     </tr>
                   `;
@@ -384,10 +382,6 @@ export default function AuthorityComplaintListScreen({ navigation, route, onLogo
                                 <Text style={styles.footerText}>
                                     {new Date(item.createdAt).toLocaleDateString()}
                                 </Text>
-                            </View>
-                            <View style={styles.footerItem}>
-                                <MapPin size={14} color="#9CA3AF" />
-                                <Text style={styles.footerText}>{item.ward || 'Unknown Ward'}</Text>
                             </View>
                         </View>
                     </TouchableOpacity>

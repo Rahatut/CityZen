@@ -203,10 +203,6 @@ export default function AuthorityComplaintDetailScreen({ route, navigation, onLo
                                 <Calendar size={14} color="#6B7280" />
                                 <Text style={styles.metaText}>{new Date(complaint?.createdAt).toLocaleDateString()}</Text>
                             </View>
-                            <View style={styles.metaItem}>
-                                <MapPin size={14} color="#6B7280" />
-                                <Text style={styles.metaText}>Ward {complaint?.ward || 'N/A'}</Text>
-                            </View>
                             <TouchableOpacity style={styles.mapsSmallBtn} onPress={openGoogleMaps}>
                                 <Map size={14} color="white" />
                                 <Text style={styles.mapsSmallBtnText}>Maps</Text>
