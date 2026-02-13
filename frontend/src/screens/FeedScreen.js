@@ -19,7 +19,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   const [searchQuery, setSearchQuery] = useState('');
   const [userData, setUserData] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
-  
+
   // Filter states
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [radiusFilter, setRadiusFilter] = useState(null); // in km
@@ -53,11 +53,11 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c; // Distance in km
   };
 
@@ -70,8 +70,9 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       const retrievedUserData = jsonValue != null ? JSON.parse(jsonValue) : null;
       setUserData(retrievedUserData);
 
-      let url = `${API_URL}/api/complaints?page=1&limit=50`;
+      let url = '/complaints?page=1&limit=50';
       let authorityCompanyId = null;
+
       if (retrievedUserData && retrievedUserData.role === 'authority') {
         // Try to get companyId from userData or AsyncStorage
         authorityCompanyId = retrievedUserData.companyId || retrievedUserData.authorityCompanyId;
@@ -79,13 +80,13 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
           authorityCompanyId = await AsyncStorage.getItem('authorityCompanyId');
         }
         if (authorityCompanyId) {
-          url = `${API_URL}/api/complaints/authority/${authorityCompanyId}?limit=50`;
+          url = `/complaints/authority/${authorityCompanyId}?limit=50`;
         }
       } else if (retrievedUserData && retrievedUserData.firebaseUid) {
-        url += `&citizenUid=${retrievedUserData.firebaseUid}`;
+        url = `/complaints?page=1&limit=50&citizenUid=${retrievedUserData.firebaseUid}`;
       }
 
-      const response = await axios.get(url, {
+      const response = await api.get(url, {
         headers: {
           'bypass-tunnel-reminder': 'true'
         },
@@ -98,7 +99,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
 
       // Fetch categories
       try {
-        const categoriesResponse = await axios.get(`${API_URL}/api/complaints/categories`);
+        const categoriesResponse = await api.get('/complaints/categories');
         const catPayload = categoriesResponse.data;
         const cats = Array.isArray(catPayload)
           ? catPayload
@@ -110,7 +111,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       } catch (catErr) {
         console.log('Could not fetch categories:', catErr);
       }
-      
+
     } catch (err) {
       console.error('Error fetching complaints:', err);
       let errorMessage = 'Failed to load complaints';
@@ -142,7 +143,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
     try {
       // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
-      
+
       if (status !== 'granted') {
         console.log('Location permission denied');
         // Fallback to Dhaka coordinates if permission denied
@@ -180,7 +181,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   const filteredComplaints = complaints.filter(complaint => {
     const matchesSearch = complaint.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       complaint.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     // Radius filter (distance-based)
     if (radiusFilter && userLocation) {
       const distance = calculateDistance(
@@ -208,7 +209,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       if (timeFilter === 'week' && diffDays > 7) return false;
       if (timeFilter === 'month' && diffDays > 30) return false;
     }
-    
+
     return matchesSearch;
   });
 
@@ -227,7 +228,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   const submitReport = async () => {
     try {
       if (reportSubmitting) return; // Prevent double submission
-      
+
       if (!userData || !userData.firebaseUid) {
         Alert.alert('Error', 'Please login to report');
         return;
@@ -236,7 +237,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
         Alert.alert('Error', 'Please select a reason');
         return;
       }
-      
+
       setReportSubmitting(true);
       await api.post(`/complaints/${reportComplaint.id}/report`, {
         complaintId: reportComplaint.id,
@@ -265,7 +266,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Text style={[styles.heading, darkMode && styles.textWhite]}>Complaints Feed</Text>
-        
+
         {/* Search Bar with Filter Button */}
         <View style={styles.searchContainer}>
           <View style={[styles.searchBar, darkMode && styles.darkInput]}>
@@ -278,7 +279,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
               onChangeText={setSearchQuery}
             />
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnActive, darkMode && styles.filterBtnDark]}
             onPress={() => setFilterModalVisible(true)}
           >
@@ -559,13 +560,13 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
               style={[styles.textArea, darkMode && styles.textWhite]}
               multiline
             />
-            <View style={[styles.rowBetween, { marginTop: 12 }] }>
+            <View style={[styles.rowBetween, { marginTop: 12 }]}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setReportVisible(false)}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.submitBtn, (!reportReason || reportSubmitting) && { opacity: 0.5 }]} 
-                onPress={submitReport} 
+              <TouchableOpacity
+                style={[styles.submitBtn, (!reportReason || reportSubmitting) && { opacity: 0.5 }]}
+                onPress={submitReport}
                 disabled={!reportReason || reportSubmitting}
               >
                 <Text style={styles.submitText}>{reportSubmitting ? 'Submitting...' : 'Submit Report'}</Text>
@@ -583,7 +584,7 @@ const styles = StyleSheet.create({
   darkContainer: { backgroundColor: '#111827' },
   heading: { fontSize: 24, fontWeight: 'bold', marginBottom: 16, color: '#1F2937' },
   textWhite: { color: 'white' },
-  
+
   // Search and Filter Container
   searchContainer: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
   searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', height: 48, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB' },
@@ -594,7 +595,7 @@ const styles = StyleSheet.create({
   filterBtnDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
   filterBadge: { position: 'absolute', top: -5, right: -5, backgroundColor: '#EF4444', borderRadius: 10, width: 20, height: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'white' },
   filterBadgeText: { color: 'white', fontSize: 10, fontWeight: 'bold' },
-  
+
   // Filter Modal (Authority Dashboard Style)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: 'white', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 20, paddingBottom: 40, maxHeight: '80%' },
@@ -611,7 +612,7 @@ const styles = StyleSheet.create({
   clearBtnText: { color: '#6B7280', fontWeight: 'bold' },
   applyBtn: { flex: 1, backgroundColor: '#1E88E5', padding: 15, borderRadius: 10, alignItems: 'center' },
   applyBtnText: { color: 'white', fontWeight: 'bold' },
-  
+
   card: { backgroundColor: 'white', borderRadius: 12, marginBottom: 20, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', elevation: 2 },
   cardDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
   cardImage: { width: '100%', height: 180 },
@@ -633,9 +634,9 @@ const styles = StyleSheet.create({
   actionsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 12 },
   actionButton: { flexDirection: 'row', alignItems: 'center' },
   actionText: { fontSize: 14 },
-  
+
   // Report Modal (existing)
-  modalBackdrop: { flex:1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   modalCard: { width: '100%', maxWidth: 520, backgroundColor: 'white', borderRadius: 12, padding: 16 },
   modalSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
   reasonItem: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },

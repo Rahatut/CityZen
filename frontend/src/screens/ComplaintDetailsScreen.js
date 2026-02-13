@@ -5,9 +5,7 @@ import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle, Camera, X, Plus } from 'lucide-react-native';
 
-import axios from 'axios';
-
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+import api from '../services/api';
 
 export default function ComplaintDetailsScreen({ route, navigation, onLogout, darkMode, toggleDarkMode }) {
   const { id, complaintId } = route.params || {};
@@ -73,7 +71,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         return;
       }
 
-      const res = await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/upvote`, { citizenUid: userData.firebaseUid });
+      const res = await api.post(`/complaints/${complaintIdToFetch}/upvote`, { citizenUid: userData.firebaseUid });
       if (res.data && res.data.upvotes !== undefined) {
         setComplaint(prev => ({ ...prev, upvotes: res.data.upvotes, hasUpvoted: true }));
         setUpvotes(res.data.upvotes); // Sync local state
@@ -96,7 +94,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
       if (!userData || !userData.firebaseUid) return Alert.alert('Error', 'Please login to rate');
 
       setRatingSubmitting(true);
-      await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/rate`, {
+      await api.post(`/complaints/${complaintIdToFetch}/rate`, {
         rating: stars,
         citizenUid: userData.firebaseUid
       });
@@ -142,7 +140,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         formData.append('images', { uri, name: filename, type });
       });
 
-      await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/appeal`, formData, {
+      await api.post(`/complaints/${complaintIdToFetch}/appeal`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -179,7 +177,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
       }
 
       setReportSubmitting(true);
-      await axios.post(`${API_URL}/api/complaints/${complaintIdToFetch}/report`, {
+      await api.post(`/complaints/${complaintIdToFetch}/report`, {
         complaintId: complaintIdToFetch,
         reportedBy: userData.firebaseUid,
         reason: reportReason,
@@ -229,14 +227,37 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   }, [complaintIdToFetch]); // Depend on complaintIdToFetch
 
   useEffect(() => {
-    fetchComplaint(); // Initial fetch
-  }, [fetchComplaint, retryTick]); // Add fetchComplaint to dependency array
+    const fetchComplaint = async () => {
+      if (!complaintIdToFetch) {
+        setError('No complaint ID provided');
+        setLoading(false);
+        return;
+      }
+      try {
+        setError(null);
+        // We need to pass citizenUid to get correct upvote status if backend supports it (next step)
+        // For now, just basic fetch
+        const response = await api.get(`/complaints/${complaintIdToFetch}`, {
+          headers: { 'bypass-tunnel-reminder': 'true' },
+          timeout: 10000,
+        });
+        setComplaint(response.data);
+        setUpvotes(response.data.upvotes || 0); // Initialize upvotes
+        setRating(response.data.rating || 0);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchComplaint(); // Re-fetch data when the screen comes into focus
-    }, [fetchComplaint])
-  );
+      } catch (err) {
+        console.error('Error fetching complaint:', err);
+        let message = 'Failed to load complaint details';
+        if (err.code === 'ECONNABORTED') message = 'Network timeout. Please check your connection.';
+        else if (err.message === 'Network Error') message = 'Network error. Please check your connection.';
+        else if (err.response?.status === 404) message = 'Complaint not found.';
+        setError(message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchComplaint();
+  }, [complaintIdToFetch, retryTick]);
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
