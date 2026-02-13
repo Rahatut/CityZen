@@ -28,29 +28,32 @@ export default function AuthorityComplaintDetailScreen({ route, navigation, onLo
 
     const rejectionShortcuts = ["Inaccurate Location", "Duplicate Report", "Private Property", "Outside Jurisdiction"];
 
-    useEffect(() => {
-        const fetchComplaint = async () => {
-            if (!complaintIdToFetch) {
-                if (!initialData) {
-                    setError('No complaint ID provided');
-                    setLoading(false);
-                }
-                return;
-            }
-            try {
-                // If we already have initialData, loading is false, so we just refresh in background or silent
-                const response = await api.get(`/complaints/${complaintIdToFetch}`);
-                setComplaint(response.data);
-                setError(null);
-            } catch (err) {
-                console.error('Error fetching complaint:', err);
-                if (!complaint) setError('Failed to load complaint details');
-            } finally {
+    const fetchComplaintData = React.useCallback(async () => {
+        if (!complaintIdToFetch) {
+            if (!initialData && !complaint) {
+                setError('No complaint ID provided');
                 setLoading(false);
             }
-        };
-        fetchComplaint();
-    }, [complaintIdToFetch]);
+            return;
+        }
+        try {
+            const response = await api.get(`/complaints/${complaintIdToFetch}`);
+            setComplaint(response.data);
+            setError(null);
+        } catch (err) {
+            console.error('Error fetching complaint:', err);
+            if (!complaint) setError('Failed to load complaint details');
+        } finally {
+            setLoading(false);
+        }
+    }, [complaintIdToFetch, initialData]); // Removed 'complaint' to avoid infinite loop
+
+    const { useFocusEffect } = require('@react-navigation/native');
+    useFocusEffect(
+        React.useCallback(() => {
+            fetchComplaintData();
+        }, [fetchComplaintData])
+    );
 
     const openGoogleMaps = () => {
         if (!complaint) return;
@@ -306,10 +309,32 @@ export default function AuthorityComplaintDetailScreen({ route, navigation, onLo
                         {/* Work Evidence Images */}
                         {complaint?.images?.filter(img => img.type === 'progress' || img.type === 'resolution').length > 0 && (
                             <View style={styles.evidenceSection}>
-                                <Text style={styles.label}>WORK EVIDENCE</Text>
+                                <Text style={styles.label}>WORK EVIDENCE (UPLOADED BY YOU)</Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.evidenceScroll}>
                                     {complaint.images.filter(img => img.type === 'progress' || img.type === 'resolution').map((img, idx) => (
-                                        <Image key={idx} source={{ uri: img.imageURL }} style={styles.evidenceImage} />
+                                        <View key={idx} style={styles.evidenceImageWrapper}>
+                                            <Image source={{ uri: img.imageURL }} style={styles.evidenceImage} />
+                                            <View style={styles.evidenceBadge}>
+                                                <Text style={styles.evidenceBadgeText}>AUTHORITY PROOF</Text>
+                                            </View>
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+
+                        {/* Citizen Evidence Images (Initial + Supplementary) */}
+                        {complaint?.images?.filter((img, idx) => (img.type === 'initial' && idx > 0) || img.type === 'evidence').length > 0 && (
+                            <View style={[styles.evidenceSection, { marginTop: 20, borderTopWidth: 1, borderTopColor: darkMode ? '#374151' : '#E5E7EB', paddingTop: 15 }]}>
+                                <Text style={styles.label}>CITIZEN PROVIDED EVIDENCE</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.evidenceScroll}>
+                                    {complaint.images.filter((img, idx) => (img.type === 'initial' && idx > 0) || img.type === 'evidence').map((img, idx) => (
+                                        <View key={idx} style={styles.evidenceImageWrapper}>
+                                            <Image source={{ uri: img.imageURL }} style={styles.evidenceImage} />
+                                            <View style={[styles.evidenceBadge, { backgroundColor: img.type === 'initial' ? 'rgba(59, 130, 246, 0.8)' : 'rgba(75, 85, 99, 0.8)' }]}>
+                                                <Text style={styles.evidenceBadgeText}>{img.type === 'initial' ? 'ORIGINAL' : 'SUPPLEMENTARY'}</Text>
+                                            </View>
+                                        </View>
                                     ))}
                                 </ScrollView>
                             </View>
@@ -477,7 +502,10 @@ const styles = StyleSheet.create({
     updateSection: { marginBottom: 16 },
     evidenceSection: { marginTop: 8 },
     evidenceScroll: { marginTop: 4 },
-    evidenceImage: { width: 120, height: 120, borderRadius: 8, marginRight: 12 },
+    evidenceImage: { width: 120, height: 120, borderRadius: 8 },
+    evidenceImageWrapper: { position: 'relative', marginRight: 12 },
+    evidenceBadge: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(30, 136, 229, 0.8)', paddingVertical: 2, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
+    evidenceBadgeText: { color: 'white', fontSize: 8, fontWeight: 'bold', textAlign: 'center' },
     noInfoText: { fontSize: 14, color: '#9CA3AF', fontStyle: 'italic' },
 
     timeline: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 10 },

@@ -197,67 +197,43 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   };
 
 
-  const fetchComplaint = useCallback(async () => {
+  const fetchComplaintData = useCallback(async () => {
     if (!complaintIdToFetch) {
       setError('No complaint ID provided');
       setLoading(false);
       return;
     }
-    setLoading(true); // Set loading to true each time we fetch
     try {
       setError(null);
-      const response = await axios.get(`${API_URL}/api/complaints/${complaintIdToFetch}`, {
-        headers: { 'bypass-tunnel-reminder': 'true' },
+      // We don't set loading(true) here to avoid flickering on every focus
+      // Only set it if we don't have complaint data yet
+      if (!complaint) setLoading(true);
+
+      const response = await api.get(`/complaints/${complaintIdToFetch}`, {
         timeout: 10000,
       });
       setComplaint(response.data);
       setUpvotes(response.data.upvotes || 0);
       setRating(response.data.rating || 0);
-
     } catch (err) {
       console.error('Error fetching complaint:', err);
-      let message = 'Failed to load complaint details';
-      if (err.code === 'ECONNABORTED') message = 'Network timeout. Please check your connection.';
-      else if (err.message === 'Network Error') message = 'Network error. Please check your connection.';
-      else if (err.response?.status === 404) message = 'Complaint not found.';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [complaintIdToFetch]); // Depend on complaintIdToFetch
-
-  useEffect(() => {
-    const fetchComplaint = async () => {
-      if (!complaintIdToFetch) {
-        setError('No complaint ID provided');
-        setLoading(false);
-        return;
-      }
-      try {
-        setError(null);
-        // We need to pass citizenUid to get correct upvote status if backend supports it (next step)
-        // For now, just basic fetch
-        const response = await api.get(`/complaints/${complaintIdToFetch}`, {
-          headers: { 'bypass-tunnel-reminder': 'true' },
-          timeout: 10000,
-        });
-        setComplaint(response.data);
-        setUpvotes(response.data.upvotes || 0); // Initialize upvotes
-        setRating(response.data.rating || 0);
-
-      } catch (err) {
-        console.error('Error fetching complaint:', err);
+      if (!complaint) {
         let message = 'Failed to load complaint details';
         if (err.code === 'ECONNABORTED') message = 'Network timeout. Please check your connection.';
         else if (err.message === 'Network Error') message = 'Network error. Please check your connection.';
         else if (err.response?.status === 404) message = 'Complaint not found.';
         setError(message);
-      } finally {
-        setLoading(false);
       }
-    };
-    fetchComplaint();
-  }, [complaintIdToFetch, retryTick]);
+    } finally {
+      setLoading(false);
+    }
+  }, [complaintIdToFetch]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchComplaintData();
+    }, [fetchComplaintData])
+  );
 
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
@@ -307,32 +283,43 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
             </View>
           </View>
 
-          {/* Citizen Added Evidence */}
-          {complaint?.images?.filter(img => img.type !== 'progress' && img.type !== 'resolution' && img.type !== 'appeal').length > 0 && (
-            <View style={[styles.card, darkMode && styles.cardDark, {position: 'relative'}]}>
-              <Text style={[styles.sectionHeader, darkMode && styles.textWhite]}>Added Evidences</Text>
+          {/* Citizen Added Evidence (Original + Supplementary) */}
+          {complaint?.images?.filter((img, idx) => (img.type === 'initial' && idx > 0) || img.type === 'evidence').length > 0 && (
+            <View style={[styles.card, darkMode && styles.cardDark, { position: 'relative' }]}>
+              <View style={styles.sectionHeaderRow}>
+                <Camera size={18} color="#9CA3AF" />
+                <Text style={[styles.sectionHeader, darkMode && styles.textWhite, { marginBottom: 0, marginLeft: 8 }]}>Citizen Evidence</Text>
+              </View>
               <TouchableOpacity
                 style={styles.addEvidencePlusButton}
                 onPress={() => navigation.navigate('AddEvidence', { complaintId: complaintIdToFetch })}
               >
                 <Plus size={12} color="white" />
               </TouchableOpacity>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {complaint.images.filter(img => img.type !== 'progress' && img.type !== 'resolution' && img.type !== 'appeal').map((img, idx) => (
-                  <Image key={idx} source={{ uri: img.imageURL }} style={{ width: 120, height: 120, borderRadius: 8, marginRight: 10 }} />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 12 }}>
+                {complaint.images.filter((img, idx) => (img.type === 'initial' && idx > 0) || img.type === 'evidence').map((img, idx) => (
+                  <View key={idx} style={{ position: 'relative', marginRight: 10 }}>
+                    <Image source={{ uri: img.imageURL }} style={{ width: 120, height: 120, borderRadius: 8 }} />
+                    <View style={[styles.evidenceBadge, { backgroundColor: img.type === 'initial' ? 'rgba(59, 130, 246, 0.7)' : 'rgba(107, 114, 128, 0.7)' }]}>
+                      <Text style={styles.evidenceBadgeText}>{img.type === 'initial' ? 'ORIGINAL' : 'SUPPLEMENTARY'}</Text>
+                    </View>
+                  </View>
                 ))}
               </ScrollView>
             </View>
           )}
 
-          {/* Remarks & Evidence */}
-          {(complaint?.statusNotes || (complaint?.images && complaint?.images.length > 0)) && (
+          {/* Authority Updates */}
+          {(complaint?.statusNotes || (complaint?.images && complaint?.images.filter(img => img.type === 'progress' || img.type === 'resolution').length > 0)) && (
             <View style={[styles.card, darkMode && styles.cardDark]}>
-              <Text style={[styles.sectionHeader, darkMode && styles.textWhite]}>Authority Updates</Text>
+              <View style={styles.sectionHeaderRow}>
+                <CheckCircle size={18} color="#1E88E5" />
+                <Text style={[styles.sectionHeader, darkMode && styles.textWhite, { marginBottom: 0, marginLeft: 8 }]}>Authority Updates</Text>
+              </View>
 
               {complaint?.statusNotes ? (
-                <View style={{ marginBottom: 16 }}>
-                  <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 4 }]}>INTERNAL REMARKS / REASON</Text>
+                <View style={{ marginVertical: 12 }}>
+                  <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 4 }]}>OFFICIAL REMARKS</Text>
                   <View style={{ backgroundColor: darkMode ? '#374151' : '#F3F4F6', padding: 12, borderRadius: 8 }}>
                     <Text style={{ color: darkMode ? 'white' : '#1F2937' }}>{complaint.statusNotes}</Text>
                   </View>
@@ -343,8 +330,48 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
                 <View>
                   <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 8 }]}>WORK EVIDENCE</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    {complaint.images.filter(img => img.type === 'progress' || img.type === 'resolution' || (img.type === undefined && complaint.images.indexOf(img) > 0)).map((img, idx) => (
-                      <Image key={idx} source={{ uri: img.imageURL }} style={{ width: 120, height: 120, borderRadius: 8, marginRight: 10 }} />
+                    {complaint.images.filter(img => img.type === 'progress' || img.type === 'resolution').map((img, idx) => (
+                      <View key={idx} style={{ position: 'relative', marginRight: 10 }}>
+                        <Image source={{ uri: img.imageURL }} style={{ width: 120, height: 120, borderRadius: 8 }} />
+                        <View style={[styles.evidenceBadge, { backgroundColor: '#1E88E5EE' }]}>
+                          <Text style={styles.evidenceBadgeText}>AUTHORITY PROOF</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Appeal Details */}
+          {(complaint?.appealReason || (complaint?.images && complaint?.images.filter(img => img.type === 'appeal').length > 0)) && (
+            <View style={[styles.card, darkMode && styles.cardDark]}>
+              <View style={styles.sectionHeaderRow}>
+                <AlertCircle size={18} color="#EF4444" />
+                <Text style={[styles.sectionHeader, darkMode && styles.textWhite, { marginBottom: 0, marginLeft: 8 }]}>Appeal Details</Text>
+              </View>
+
+              {complaint?.appealReason && (
+                <View style={{ marginVertical: 12 }}>
+                  <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 4 }]}>APPEAL REASON</Text>
+                  <View style={{ backgroundColor: darkMode ? '#4B5563' : '#FEF2F2', padding: 12, borderRadius: 8, borderLeftWidth: 4, borderLeftColor: '#EF4444' }}>
+                    <Text style={{ color: darkMode ? 'white' : '#B91C1C' }}>{complaint.appealReason}</Text>
+                  </View>
+                </View>
+              )}
+
+              {complaint?.images?.filter(img => img.type === 'appeal').length > 0 && (
+                <View>
+                  <Text style={[styles.label, { fontSize: 12, color: '#6B7280', marginBottom: 8 }]}>APPEAL EVIDENCE</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {complaint.images.filter(img => img.type === 'appeal').map((img, idx) => (
+                      <View key={idx} style={{ position: 'relative', marginRight: 10 }}>
+                        <Image source={{ uri: img.imageURL }} style={{ width: 120, height: 120, borderRadius: 8 }} />
+                        <View style={[styles.evidenceBadge, { backgroundColor: '#EF4444EE' }]}>
+                          <Text style={styles.evidenceBadgeText}>APPEAL PROOF</Text>
+                        </View>
+                      </View>
                     ))}
                   </ScrollView>
                 </View>
@@ -509,13 +536,15 @@ const styles = StyleSheet.create({
   cardDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
   title: { fontSize: 22, fontWeight: 'bold', color: '#1F2937', marginBottom: 8 },
   sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingBottom: 8 },
+  label: { fontSize: 11, fontWeight: 'bold', color: '#6B7280', letterSpacing: 0.5, textTransform: 'uppercase' },
   addEvidencePlusButton: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: '#9CA3AF', 
-    borderRadius: 20, 
-    padding: 8, 
+    backgroundColor: '#9CA3AF',
+    borderRadius: 20,
+    padding: 8,
     zIndex: 1,
   },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
@@ -551,4 +580,6 @@ const styles = StyleSheet.create({
   appealBtnText: { color: 'white', fontWeight: 'bold' },
   appealCameraBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F9FF', padding: 12, borderRadius: 10, marginVertical: 15, borderStyle: 'dashed', borderWidth: 1, borderColor: '#1E88E5' },
   submitAppealBtn: { backgroundColor: '#1E88E5', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  evidenceBadge: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 2, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
+  evidenceBadgeText: { color: 'white', fontSize: 8, fontWeight: 'bold', textAlign: 'center' },
 });

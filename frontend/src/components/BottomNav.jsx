@@ -8,7 +8,7 @@ export default function BottomNav({ navigation, darkMode }) {
   try {
     const route = useRoute();
     currentRoute = route.name;
-  } catch (e) {}
+  } catch (e) { }
 
   const activeColor = '#1E88E5';
   const inactiveColor = darkMode ? '#9CA3AF' : '#6B7280';
@@ -46,8 +46,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    paddingVertical: 12,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    paddingVertical: 16,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -58,5 +58,5 @@ const styles = StyleSheet.create({
   lightContainer: { backgroundColor: '#FFFFFF', borderTopColor: '#E5E7EB' },
   darkContainer: { backgroundColor: '#1F2937', borderTopColor: '#374151' },
   tab: { alignItems: 'center', flex: 1, paddingVertical: 4 },
-  label: { fontSize: 10, marginTop: 4 },
+  label: { fontSize: 11, marginTop: 4 },
 });
