@@ -36,6 +36,7 @@ import UserComplaintListScreen from './src/screens/UserComplaintListScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import LandingScreen from './src/screens/LandingScreen';
 import SimilarComplaintsScreen from './src/screens/SimilarComplaintsScreen';
+import AddEvidenceScreen from './src/screens/AddEvidenceScreen'; // Import new screen
 import AuthorityComplaintListScreen from './src/screens/AuthorityComplaintListScreen';
 import AuthorityComplaintDetailScreen from './src/screens/AuthorityComplaintDetailScreen';
 
@@ -110,6 +111,7 @@ export default function App() {
             <Stack.Screen name="AuthorityComplaintList">{(props) => <AuthorityComplaintListScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="AuthorityComplaintDetail">{(props) => <AuthorityComplaintDetailScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="AdminDashboard">{(props) => <AdminDashboardScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
+            <Stack.Screen name="AddEvidence">{(props) => <AddEvidenceScreen {...props} />}</Stack.Screen>
           </Stack.Navigator>
         </NavigationContainer>
       </NotificationProvider>

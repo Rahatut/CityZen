@@ -1358,6 +1358,78 @@ exports.getAppeals = async (req, res) => {
 };
 
 /* =========================
+   ADD EVIDENCE TO COMPLAINT
+========================= */
+exports.addEvidenceToComplaint = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id: complaintId } = req.params;
+    const imageFiles = req.files;
+
+    if (!complaintId) {
+      return res.status(400).json({ message: 'Complaint ID is required.' });
+    }
+    if (!imageFiles || imageFiles.length === 0) {
+      return res.status(400).json({ message: 'Image files are required.' });
+    }
+
+    const complaint = await Complaint.findByPk(complaintId, { transaction: t });
+    if (!complaint) {
+      await t.rollback();
+      return res.status(404).json({ message: 'Complaint not found.' });
+    }
+
+    const bucketName = 'cityzen-media';
+    const uploadedImages = [];
+
+    for (const imageFile of imageFiles) {
+      const filePath = `complaint_evidence/${complaintId}_${Date.now()}_${imageFile.originalname}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(filePath, imageFile.buffer, {
+          contentType: imageFile.mimetype,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(`Supabase upload failed: ${uploadError.message}`);
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(bucketName)
+        .getPublicUrl(filePath);
+
+      if (!publicUrlData?.publicUrl) {
+        throw new Error('Failed to retrieve public URL.');
+      }
+
+      const newImage = await ComplaintImages.create(
+        {
+          complaintId: complaintId,
+          imageURL: publicUrlData.publicUrl,
+          type: 'evidence', // Mark as evidence
+        },
+        { transaction: t }
+      );
+      uploadedImages.push(newImage);
+    }
+
+    await t.commit();
+    res.status(201).json({
+      message: 'Evidence added successfully',
+      images: uploadedImages,
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error('Add Evidence to Complaint Error:', error.message);
+    res.status(500).json({
+      message: `Failed to add evidence: ${error.message}`,
+    });
+  }
+};
+
+/* =========================
    UPDATE APPEAL STATUS (ADMIN)
 ========================= */
 exports.updateAppealStatus = async (req, res) => {

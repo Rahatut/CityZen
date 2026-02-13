@@ -187,7 +187,7 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
                             `A similar complaint has already been reported in this area. Would you like to view it?`,
                             [
                                 { text: "Cancel", style: "cancel" },
-                                { text: "Show", onPress: () => navigation.navigate('SimilarComplaints', { complaints: result.complaints }) }
+                                { text: "Show", onPress: () => navigation.navigate('SimilarComplaints', { similarComplaints: result.complaints }) }
                             ]
                         );
                         hasDuplicateAlertBeenShown.current = true; // Use .current for ref

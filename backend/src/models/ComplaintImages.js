@@ -21,7 +21,7 @@ const ComplaintImages = sequelize.define('ComplaintImages', {
     allowNull: true,
   },
   type: {
-    type: DataTypes.ENUM('initial', 'progress', 'resolution', 'appeal'),
+    type: DataTypes.ENUM('initial', 'progress', 'resolution', 'appeal', 'evidence'),
     defaultValue: 'initial',
     allowNull: false
   }
