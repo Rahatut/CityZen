@@ -5,7 +5,7 @@ import axios from 'axios';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-export default function AdminFlagsScreen({ darkMode, defaultTab }) {
+export default function AdminFlagsScreen({ darkMode, defaultTab, navigation }) {
   const [subTab, setSubTab] = useState(defaultTab || 'reported');
   const [loading, setLoading] = useState(true);
 
@@ -20,6 +20,13 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
   useEffect(() => {
     fetchReports();
   }, []);
+
+  const { useFocusEffect } = require('@react-navigation/native');
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchReports();
+    }, [])
+  );
 
   const fetchReports = async () => {
     try {
@@ -85,7 +92,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
-    
+
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     return `${diffDays}d ago`;
@@ -103,14 +110,14 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         headers: { 'bypass-tunnel-reminder': 'true' },
         timeout: 5000,
       });
-      
+
       const info = {
         strikes: response.data.strikes || 0,
         isBanned: response.data.isBanned || false,
         bannedAt: response.data.bannedAt,
         banReason: response.data.banReason
       };
-      
+
       // Update cache
       setUserModerationCache(prev => ({ ...prev, [citizenUid]: info }));
       return info;
@@ -122,10 +129,10 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
 
   // Data for Appeals (Formerly Fake Resolves)
   const [appeals, setAppeals] = useState([]);
-  
+
   // Data for Forwarded Appeals (tracking approved appeals)
   const [forwardedAppeals, setForwardedAppeals] = useState([]);
-  
+
   // User moderation info cache (uid -> {strikes, isBanned})
   const [userModerationCache, setUserModerationCache] = useState({});
 
@@ -188,7 +195,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         headers: { 'bypass-tunnel-reminder': 'true' },
         timeout: 10000,
       });
-      
+
       if (response.data && response.data.complaints) {
         // Filter for complaints that were forwarded by admin
         const forwarded = response.data.complaints
@@ -225,14 +232,14 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
       }, {
         headers: { 'bypass-tunnel-reminder': 'true' },
       });
-      
+
       // Clear cache
       setUserModerationCache(prev => {
         const newCache = { ...prev };
         delete newCache[citizenUid];
         return newCache;
       });
-      
+
       Alert.alert("User Banned", "The user has been permanently banned from the platform.");
     } catch (error) {
       console.error('Ban error:', error);
@@ -248,14 +255,14 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
       }, {
         headers: { 'bypass-tunnel-reminder': 'true' },
       });
-      
+
       // Clear cache
       setUserModerationCache(prev => {
         const newCache = { ...prev };
         delete newCache[citizenUid];
         return newCache;
       });
-      
+
       Alert.alert("User Unbanned", "The user has been unbanned and can now access the platform.");
     } catch (error) {
       console.error('Unban error:', error);
@@ -267,28 +274,30 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
   const handleAppealDecision = async (item, type) => {
     if (type === 'approve') {
       Alert.alert(
-        "Approve Appeal", 
-        `Forward Complaint #${item.complaintId} back to authority for re-investigation?`, 
+        "Approve Appeal",
+        `Forward Complaint #${item.complaintId} back to authority for re-investigation?`,
         [
           { text: "Cancel" },
-          { text: "Approve & Forward", onPress: async () => {
-            try {
-              await axios.patch(
-                `${API_URL}/api/complaints/appeals/${item.complaintId}`,
-                {
-                  action: 'approve',
-                  adminRemarks: 'Appeal approved - complaint requires re-investigation'
-                },
-                { headers: { 'bypass-tunnel-reminder': 'true' } }
-              );
-              
-              setAppeals(appeals.filter(a => a.id !== item.id));
-              Alert.alert("Forwarded", `Complaint has been sent back to ${item.categoryName} authorities with admin priority flag.`);
-            } catch (error) {
-              console.error('Approve appeal error:', error);
-              Alert.alert('Error', 'Failed to approve appeal: ' + (error.response?.data?.message || error.message));
+          {
+            text: "Approve & Forward", onPress: async () => {
+              try {
+                await axios.patch(
+                  `${API_URL}/api/complaints/appeals/${item.complaintId}`,
+                  {
+                    action: 'approve',
+                    adminRemarks: 'Appeal approved - complaint requires re-investigation'
+                  },
+                  { headers: { 'bypass-tunnel-reminder': 'true' } }
+                );
+
+                setAppeals(appeals.filter(a => a.id !== item.id));
+                Alert.alert("Forwarded", `Complaint has been sent back to ${item.categoryName} authorities with admin priority flag.`);
+              } catch (error) {
+                console.error('Approve appeal error:', error);
+                Alert.alert('Error', 'Failed to approve appeal: ' + (error.response?.data?.message || error.message));
+              }
             }
-          }}
+          }
         ]
       );
     } else if (type === 'reject') {
@@ -296,14 +305,14 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
       const citizenUid = item.citizenUid;
       const userInfo = await getUserModerationInfo(citizenUid);
       const futureStrikes = userInfo.strikes + 1;
-      
+
       Alert.alert(
-        "Reject Appeal & Add Strike?", 
+        "Reject Appeal & Add Strike?",
         `This will reject the appeal and the complaint stays rejected.\\n\\n${item.user} currently has ${userInfo.strikes} strike(s).\\n\\nDo you want to add a strike for inappropriate appeal?`,
         [
           { text: "Cancel" },
-          { 
-            text: "Reject Only", 
+          {
+            text: "Reject Only",
             onPress: async () => {
               try {
                 await axios.patch(
@@ -314,7 +323,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                   },
                   { headers: { 'bypass-tunnel-reminder': 'true' } }
                 );
-                
+
                 setAppeals(appeals.filter(a => a.id !== item.id));
                 Alert.alert("Appeal Rejected", "The citizen's appeal has been rejected. Original decision stands.");
               } catch (error) {
@@ -323,9 +332,9 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
               }
             }
           },
-          { 
-            text: "Reject & Strike", 
-            style: "destructive", 
+          {
+            text: "Reject & Strike",
+            style: "destructive",
             onPress: async () => {
               try {
                 // Reject the appeal
@@ -337,7 +346,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                   },
                   { headers: { 'bypass-tunnel-reminder': 'true' } }
                 );
-                
+
                 // Add strike to user
                 const strikeResponse = await axios.post(`${API_URL}/api/moderation/strike`, {
                   citizenUid: citizenUid,
@@ -346,16 +355,16 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                 }, {
                   headers: { 'bypass-tunnel-reminder': 'true' },
                 });
-                
+
                 // Clear cache
                 setUserModerationCache(prev => {
                   const newCache = { ...prev };
                   delete newCache[citizenUid];
                   return newCache;
                 });
-                
+
                 setAppeals(appeals.filter(a => a.id !== item.id));
-                
+
                 // Check if should ban
                 if (strikeResponse.data.shouldBan && !strikeResponse.data.isBanned) {
                   Alert.alert(
@@ -363,8 +372,8 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                     `${item.user} now has ${strikeResponse.data.strikes} strikes.\\n\\nDo you want to ban this user permanently?`,
                     [
                       { text: "Not Now" },
-                      { 
-                        text: "Ban User", 
+                      {
+                        text: "Ban User",
                         style: "destructive",
                         onPress: () => banUser(citizenUid, strikeResponse.data.strikes)
                       }
@@ -386,15 +395,15 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
       const citizenUid = item.citizenUid;
       const userInfo = await getUserModerationInfo(citizenUid);
       const futureStrikes = userInfo.strikes + 1;
-      
+
       Alert.alert(
         "Delete Appeal & Add Strike?",
         `This will permanently remove Complaint #${item.complaintId}.\\n\\nUser currently has ${userInfo.strikes} strike(s).\\nAfter this action: ${futureStrikes} strike(s)${futureStrikes >= 5 ? '\\n⚠️ User will reach ban threshold!' : ''}`,
         [
           { text: "Cancel" },
-          { 
-            text: "Delete & Strike", 
-            style: "destructive", 
+          {
+            text: "Delete & Strike",
+            style: "destructive",
             onPress: async () => {
               try {
                 // Delete the complaint from backend
@@ -402,7 +411,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                   data: { citizenUid: 'admin' }, // Admin override
                   headers: { 'bypass-tunnel-reminder': 'true' },
                 });
-                
+
                 // Add strike to user
                 const strikeResponse = await axios.post(`${API_URL}/api/moderation/strike`, {
                   citizenUid: citizenUid,
@@ -411,17 +420,17 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                 }, {
                   headers: { 'bypass-tunnel-reminder': 'true' },
                 });
-                
+
                 // Clear cache
                 setUserModerationCache(prev => {
                   const newCache = { ...prev };
                   delete newCache[citizenUid];
                   return newCache;
                 });
-                
+
                 // Remove from local state
                 setAppeals(appeals.filter(a => a.id !== item.id));
-                
+
                 // Check if should ban
                 if (strikeResponse.data.shouldBan && !strikeResponse.data.isBanned) {
                   Alert.alert(
@@ -429,8 +438,8 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                     `User now has ${strikeResponse.data.strikes} strikes.\\n\\nDo you want to ban this user permanently?`,
                     [
                       { text: "Not Now" },
-                      { 
-                        text: "Ban User", 
+                      {
+                        text: "Ban User",
                         style: "destructive",
                         onPress: () => banUser(citizenUid, strikeResponse.data.strikes)
                       }
@@ -456,15 +465,15 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
       // Get user info first
       const userInfo = await getUserModerationInfo(item.citizenUid);
       const futureStrikes = userInfo.strikes + 1;
-      
+
       Alert.alert(
         "Delete Post & Add Strike?",
         `This will permanently remove the complaint.\\n\\n${item.user} currently has ${userInfo.strikes} strike(s).\\nAfter this action: ${futureStrikes} strike(s)${futureStrikes >= 5 ? '\\n⚠️ User will reach ban threshold!' : ''}`,
         [
           { text: "Cancel" },
-          { 
-            text: "Delete & Strike", 
-            style: "destructive", 
+          {
+            text: "Delete & Strike",
+            style: "destructive",
             onPress: async () => {
               try {
                 // Delete the complaint from backend
@@ -472,7 +481,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                   data: { citizenUid: 'admin' },
                   headers: { 'bypass-tunnel-reminder': 'true' },
                 });
-                
+
                 // Add strike to user
                 const strikeResponse = await axios.post(`${API_URL}/api/moderation/strike`, {
                   citizenUid: item.citizenUid,
@@ -481,17 +490,17 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                 }, {
                   headers: { 'bypass-tunnel-reminder': 'true' },
                 });
-                
+
                 // Clear cache for this user
                 setUserModerationCache(prev => {
                   const newCache = { ...prev };
                   delete newCache[item.citizenUid];
                   return newCache;
                 });
-                
+
                 // Remove from local state
                 setReports(reports.filter(r => r.id !== item.id));
-                
+
                 // Check if should ban
                 if (strikeResponse.data.shouldBan && !strikeResponse.data.isBanned) {
                   Alert.alert(
@@ -499,8 +508,8 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
                     `${item.user} now has ${strikeResponse.data.strikes} strikes.\\n\\nDo you want to ban this user permanently?`,
                     [
                       { text: "Not Now" },
-                      { 
-                        text: "Ban User", 
+                      {
+                        text: "Ban User",
                         style: "destructive",
                         onPress: () => banUser(item.citizenUid, strikeResponse.data.strikes)
                       }
@@ -520,16 +529,16 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
     } else {
       Alert.alert("Reject Report", "No action will be taken. Dismiss this flag?", [
         { text: "Cancel" },
-        { 
-          text: "Dismiss", 
+        {
+          text: "Dismiss",
           onPress: async () => {
             try {
               // Update report status to dismissed
-              await axios.patch(`${API_URL}/api/complaints/reports/${item.id}`, 
+              await axios.patch(`${API_URL}/api/complaints/reports/${item.id}`,
                 { status: 'dismissed' },
                 { headers: { 'bypass-tunnel-reminder': 'true' } }
               );
-              
+
               // Remove from local state
               setReports(reports.filter(r => r.id !== item.id));
             } catch (error) {
@@ -552,7 +561,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         <AlertTriangle size={12} color="#EF4444" />
         <Text style={styles.reasonText}>{item.reason}</Text>
       </View>
-      <Text style={[styles.mainText, darkMode && {color: 'white'}]}>Complaint #{item.complaintId}: {item.complaint?.title || 'N/A'}</Text>
+      <Text style={[styles.mainText, darkMode && { color: 'white' }]}>Complaint #{item.complaintId}: {item.complaint?.title || 'N/A'}</Text>
       {item.description && (
         <Text style={[styles.subNote, { marginTop: 4 }]}>Details: {item.description}</Text>
       )}
@@ -575,7 +584,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         <Text style={styles.user}>{item.user}</Text>
         <Text style={styles.time}><Clock size={10} color="#9CA3AF" /> {item.time}</Text>
       </View>
-      <Text style={[styles.mainText, darkMode && {color: 'white'}]}>Complaint #{item.complaintId}: {item.title}</Text>
+      <Text style={[styles.mainText, darkMode && { color: 'white' }]}>Complaint #{item.complaintId}: {item.title}</Text>
       <Text style={styles.subNote}>Category: {item.categoryName}</Text>
       <View style={[styles.reasonBadge, { backgroundColor: '#FEF3C7' }]}>
         <AlertTriangle size={12} color="#F59E0B" />
@@ -589,7 +598,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         </TouchableOpacity>
         <TouchableOpacity style={[styles.btnSec, { flex: 1 }]} onPress={() => handleAppealDecision(item, 'reject')}>
           <XCircle size={16} color="#EF4444" />
-          <Text style={[styles.btnTextSec, {color: '#EF4444'}]}>Reject</Text>
+          <Text style={[styles.btnTextSec, { color: '#EF4444' }]}>Reject</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.btnPrimForward, { flex: 1 }]} onPress={() => handleAppealDecision(item, 'approve')}>
           <Send size={16} color="white" />
@@ -603,7 +612,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
   const renderForwardedAppealItem = ({ item }) => {
     // Status badge color based on current status
     const getStatusColor = (status) => {
-      switch(status) {
+      switch (status) {
         case 'pending': return '#F59E0B'; // Orange
         case 'accepted': return '#3B82F6'; // Blue
         case 'in_progress': return '#8B5CF6'; // Purple
@@ -614,7 +623,7 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
     };
 
     const getStatusIcon = (status) => {
-      switch(status) {
+      switch (status) {
         case 'pending': return Clock;
         case 'accepted': return CheckCircle;
         case 'in_progress': return RefreshCw;
@@ -633,11 +642,11 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
           <Text style={styles.user}>{item.user}</Text>
           <Text style={styles.time}><Clock size={10} color="#9CA3AF" /> Forwarded {item.forwardedAt}</Text>
         </View>
-        <Text style={[styles.mainText, darkMode && {color: 'white'}]}>
+        <Text style={[styles.mainText, darkMode && { color: 'white' }]}>
           Complaint #{item.complaintId}: {item.title}
         </Text>
         <Text style={styles.subNote}>Category: {item.categoryName}</Text>
-        
+
         {/* Current Status Badge */}
         <View style={[styles.reasonBadge, { backgroundColor: `${statusColor}20`, marginTop: 8 }]}>
           <StatusIcon size={12} color={statusColor} />
@@ -667,15 +676,10 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
         )}
 
         {/* View Details Button */}
-        <TouchableOpacity 
-          style={[styles.btnPrimForward, { marginTop: 12 }]} 
+        <TouchableOpacity
+          style={[styles.btnPrimForward, { marginTop: 12 }]}
           onPress={() => {
-            // Navigate to complaint details (you'll need to add navigation prop)
-            Alert.alert(
-              'Complaint Details',
-              `View full details of Complaint #${item.complaintId}\n\nCurrent Status: ${item.currentStatus}\nCategory: ${item.categoryName}`,
-              [{ text: 'OK' }]
-            );
+            navigation.navigate('AdminComplaintDetail', { complaintId: item.complaintId });
           }}
         >
           <Text style={styles.btnTextPrim}>View Full Details</Text>
@@ -684,9 +688,15 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
     );
   };
 
+  const wrapPress = (item, children) => (
+    <TouchableOpacity activeOpacity={0.7} onPress={() => navigation.navigate('AdminComplaintDetail', { complaintId: item.complaintId })}>
+      {children}
+    </TouchableOpacity>
+  );
+
   return (
     <View style={styles.container}>
-      <Text style={[styles.title, darkMode && {color: 'white'}]}>Moderation Triage</Text>
+      <Text style={[styles.title, darkMode && { color: 'white' }]}>Moderation Triage</Text>
       <View style={styles.tabBar}>
         <TouchableOpacity style={[styles.tab, subTab === 'reported' && styles.tabActive]} onPress={() => setSubTab('reported')}>
           <Text style={[styles.tabText, subTab === 'reported' && styles.tabTextActive]}>Reports</Text>
@@ -705,20 +715,20 @@ export default function AdminFlagsScreen({ darkMode, defaultTab }) {
           <Text style={[styles.subNote, { marginTop: 12 }]}>Loading {subTab}...</Text>
         </View>
       ) : (
-        <FlatList 
+        <FlatList
           data={
-            subTab === 'reported' ? reports : 
-            subTab === 'appeals' ? appeals : 
-            forwardedAppeals
+            subTab === 'reported' ? reports :
+              subTab === 'appeals' ? appeals :
+                forwardedAppeals
           }
-          renderItem={
-            subTab === 'reported' ? renderReportItem : 
-            subTab === 'appeals' ? renderAppealItem : 
-            renderForwardedAppealItem
-          }
+          renderItem={({ item }) => {
+            if (subTab === 'reported') return wrapPress(item, renderReportItem({ item }));
+            if (subTab === 'appeals') return wrapPress(item, renderAppealItem({ item }));
+            return renderForwardedAppealItem({ item });
+          }}
           keyExtractor={item => item.id.toString()}
           ListEmptyComponent={<Text style={styles.emptyText}>No items in {subTab} queue.</Text>}
-          contentContainerStyle={{paddingBottom: 40}}
+          contentContainerStyle={{ paddingBottom: 40 }}
         />
       )}
     </View>

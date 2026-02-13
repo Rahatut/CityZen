@@ -19,34 +19,42 @@ export default function AdminStatusScreen({ darkMode, onJump }) {
 
   const formatCount = (n) => (Number.isFinite(n) && n >= 0 ? String(n).padStart(2, '0') : '--');
 
+  const fetchKpis = async () => {
+    try {
+      setLoadingKpis(true);
+      const [kpiRes, modRes] = await Promise.all([
+        api.get('/admin/kpis/details'),
+        api.get('/admin/moderation')
+      ]);
+      setKpis({
+        serviceHealth: kpiRes.data?.serviceHealth ?? null,
+        avgSolveHours: kpiRes.data?.avgSolveHours ?? null,
+        pending: kpiRes.data?.pending ?? null,
+      });
+      setKpiDetails(kpiRes.data || null);
+      setModeration({
+        reportedPending: modRes.data?.reportedPending ?? null,
+        appealsPending: modRes.data?.appealsPending ?? null,
+        reportedTotal: modRes.data?.reportedTotal ?? null,
+        appealsTotal: modRes.data?.appealsTotal ?? null,
+      });
+    } catch (error) {
+      console.error('KPI Fetch Error:', error.response?.data || error.message);
+    } finally {
+      setLoadingKpis(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchKpis = async () => {
-      try {
-        setLoadingKpis(true);
-        const [kpiRes, modRes] = await Promise.all([
-          api.get('/admin/kpis/details'),
-          api.get('/admin/moderation')
-        ]);
-        setKpis({
-          serviceHealth: kpiRes.data?.serviceHealth ?? null,
-          avgSolveHours: kpiRes.data?.avgSolveHours ?? null,
-          pending: kpiRes.data?.pending ?? null,
-        });
-        setKpiDetails(kpiRes.data || null);
-        setModeration({
-          reportedPending: modRes.data?.reportedPending ?? null,
-          appealsPending: modRes.data?.appealsPending ?? null,
-          reportedTotal: modRes.data?.reportedTotal ?? null,
-          appealsTotal: modRes.data?.appealsTotal ?? null,
-        });
-      } catch (error) {
-        console.error('KPI Fetch Error:', error.response?.data || error.message);
-      } finally {
-        setLoadingKpis(false);
-      }
-    };
     fetchKpis();
   }, []);
+
+  const { useFocusEffect } = require('@react-navigation/native');
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchKpis();
+    }, [])
+  );
 
   const openDetails = (type) => {
     setDetailType(type);
@@ -140,14 +148,14 @@ export default function AdminStatusScreen({ darkMode, onJump }) {
 }
 
 const KPIBox = ({ icon: Icon, val, lab, color, darkMode, loading, onPress }) => (
-  <TouchableOpacity 
+  <TouchableOpacity
     style={[styles.kpiCard, darkMode && styles.cardDark]}
     onPress={onPress}
     disabled={!onPress}
   >
     <Icon size={20} color={color} />
     {loading ? <ActivityIndicator size="small" color={color} style={{ marginTop: 8 }} /> : (
-      <Text style={[styles.kpiVal, darkMode && {color: 'white'}]}>{val}</Text>
+      <Text style={[styles.kpiVal, darkMode && { color: 'white' }]}>{val}</Text>
     )}
     <Text style={styles.kpiLab}>{lab}</Text>
   </TouchableOpacity>

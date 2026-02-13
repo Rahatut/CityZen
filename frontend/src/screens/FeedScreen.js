@@ -330,40 +330,52 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
         {!loading && !error && filteredComplaints.map((item) => (
           <TouchableOpacity
             key={item.id}
+            activeOpacity={0.9}
             style={[styles.card, darkMode && styles.cardDark]}
             onPress={() => navigation.navigate('ComplaintDetails', { id: item.id })}
           >
-            {item.images && item.images.length > 0 && (
-              <Image source={{ uri: item.images[0].imageURL }} style={styles.cardImage} />
-            )}
-            <View style={[styles.statusBadge, {
-              backgroundColor:
-                item.currentStatus === 'resolved' || item.currentStatus === 'completed' ? '#D1FAE5' :
-                  item.currentStatus === 'rejected' ? '#FEE2E2' :
-                    item.currentStatus === 'in_progress' || item.currentStatus === 'accepted' ? '#FFEDD5' : '#E5E7EB'
-            }]}>
-              <Text style={{
-                color:
-                  item.currentStatus === 'resolved' || item.currentStatus === 'completed' ? '#065F46' :
-                    item.currentStatus === 'rejected' ? '#B91C1C' :
-                      item.currentStatus === 'in_progress' || item.currentStatus === 'accepted' ? '#C2410C' : '#374151',
-                fontSize: 10, fontWeight: 'bold'
-              }}>
-                {item.currentStatus ? (item.currentStatus.charAt(0).toUpperCase() + item.currentStatus.slice(1).replace('_', ' ')) : 'Pending'}
-              </Text>
-            </View>
-            <View style={styles.cardContent}>
-              <Text style={[styles.cardTitle, darkMode && styles.textWhite]} numberOfLines={2}>{item.title}</Text>
-              <View style={styles.row}>
-                <MapPin size={14} color="#6B7280" />
-                <Text style={styles.cardMeta} numberOfLines={1}>
-                  {item.Category?.name || 'Uncategorized'}
-                </Text>
+            {/* Header Row: Category & Date */}
+            <View style={styles.cardHeader}>
+              <View style={styles.categoryBadgeContainer}>
+                <View style={[styles.categoryIconCircle, { backgroundColor: darkMode ? '#374151' : '#F3F4F6' }]}>
+                  <MapPin size={10} color={darkMode ? '#9CA3AF' : '#6B7280'} />
+                </View>
+                <Text style={[styles.categoryText, darkMode && styles.textGray]}>{item.Category?.name || 'Uncategorized'}</Text>
               </View>
-              <View style={styles.divider} />
-              <View style={styles.actionsRow}>
+              <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+            </View>
+
+            {/* Image Section */}
+            {(() => {
+              const displayImage = item.images?.find(img => img.type === 'initial') || item.images?.[0];
+              return displayImage ? (
+                <View style={styles.imageWrapper}>
+                  <Image source={{ uri: displayImage.imageURL }} style={styles.cardImage} />
+                  <View style={[styles.statusOverlay, {
+                    backgroundColor:
+                      item.currentStatus === 'resolved' || item.currentStatus === 'completed' ? '#059669EE' :
+                        item.currentStatus === 'rejected' ? '#DC2626EE' :
+                          item.currentStatus === 'in_progress' ? '#1E88E5EE' :
+                            item.currentStatus === 'accepted' ? '#F59E0BEE' : '#6B7280EE'
+                  }]}>
+                    <Text style={styles.statusOverlayText}>
+                      {(item.currentStatus || 'pending').replace('_', ' ').toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+              ) : null;
+            })()}
+
+            <View style={styles.cardInfo}>
+              <Text style={[styles.cardTitle, darkMode && styles.textWhite]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[styles.cardDescription, darkMode && styles.textGray]} numberOfLines={2}>
+                {item.description || 'No description provided.'}
+              </Text>
+
+              {/* Action Bar */}
+              <View style={[styles.cardActions, darkMode && styles.cardActionsDark]}>
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={styles.actionBtn}
                   onPress={async () => {
                     try {
                       if (!userData || !userData.firebaseUid) {
@@ -376,8 +388,6 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                       }
                     } catch (e) {
                       if (e.response && e.response.status === 400) {
-                        // Already upvoted or bad request
-                        console.log('Upvote prevented:', e.response.data.message);
                         Alert.alert('Info', 'You have already upvoted this complaint.');
                       } else {
                         console.error('Upvote failed', e);
@@ -385,29 +395,36 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                     }
                   }}
                 >
-                  <Heart size={16} color={item.upvotes > 0 ? "#EF4444" : "#6B7280"} fill={item.hasUpvoted ? "#EF4444" : "none"} />
-                  <Text style={[styles.actionText, { marginLeft: 4, color: item.upvotes > 0 ? "#EF4444" : "#6B7280" }]}>
-                    {item.upvotes || 0} upvotes
+                  <Heart
+                    size={18}
+                    color={item.hasUpvoted ? "#EF4444" : "#9CA3AF"}
+                    fill={item.hasUpvoted ? "#EF4444" : "transparent"}
+                  />
+                  <Text style={[styles.actionBtnLabel, item.hasUpvoted && { color: "#EF4444" }]}>
+                    {item.upvotes || 0}
                   </Text>
                 </TouchableOpacity>
+
+                <View style={styles.vSeparator} />
+
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={styles.actionBtn}
                   onPress={() => navigation.navigate('AddEvidence', { complaintId: item.id })}
                 >
-                  <Camera size={16} color="#6B7280" />
-                  <Text style={[styles.actionText, { marginLeft: 4, color: "#6B7280" }]}>Add Evidence</Text>
+                  <Camera size={18} color="#6B7280" />
+                  <Text style={styles.actionBtnLabel}>Evidence</Text>
                 </TouchableOpacity>
+
+                <View style={styles.vSeparator} />
+
                 <TouchableOpacity
-                  style={styles.actionButton}
+                  style={styles.actionBtn}
                   onPress={() => openReport(item)}
                 >
-                  <AlertCircle size={16} color="#6B7280" />
-                  <Text style={[styles.actionText, { marginLeft: 4, color: "#6B7280" }]}>Report</Text>
+                  <AlertCircle size={18} color="#6B7280" />
+                  <Text style={styles.actionBtnLabel}>Report</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.cardMeta}>
-                {new Date(item.createdAt).toLocaleDateString()}
-              </Text>
             </View>
           </TouchableOpacity>
         ))}
@@ -613,16 +630,126 @@ const styles = StyleSheet.create({
   applyBtn: { flex: 1, backgroundColor: '#1E88E5', padding: 15, borderRadius: 10, alignItems: 'center' },
   applyBtnText: { color: 'white', fontWeight: 'bold' },
 
-  card: { backgroundColor: 'white', borderRadius: 12, marginBottom: 20, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', elevation: 2 },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    marginBottom: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10
+  },
   cardDark: { backgroundColor: '#1F2937', borderColor: '#374151' },
-  cardImage: { width: '100%', height: 180 },
-  statusBadge: { position: 'absolute', top: 12, right: 12, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  cardContent: { padding: 16 },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 8, color: '#1F2937' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  cardMeta: { color: '#6B7280', fontSize: 14 },
-  divider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 12 },
+
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12
+  },
+  categoryBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  categoryIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  categoryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4B5563',
+    letterSpacing: 0.2
+  },
+  dateText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontWeight: '500'
+  },
+
+  imageWrapper: {
+    position: 'relative',
+    height: 220,
+    width: '100%'
+  },
+  cardImage: {
+    width: '100%',
+    height: '100%'
+  },
+  statusOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderTopLeftRadius: 16,
+    elevation: 2
+  },
+  statusOverlayText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1
+  },
+
+  cardInfo: {
+    padding: 16
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginBottom: 6,
+    letterSpacing: -0.5
+  },
+  cardDescription: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+    marginBottom: 16
+  },
+
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    justifyContent: 'space-around',
+    borderWidth: 1,
+    borderColor: '#F3F4F6'
+  },
+  cardActionsDark: {
+    backgroundColor: '#374151',
+    borderColor: '#4B5563'
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8
+  },
+  actionBtnLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6B7280'
+  },
+  vSeparator: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#E5E7EB'
+  },
+
   centerContainer: { justifyContent: 'center', alignItems: 'center', paddingVertical: 40 },
   loadingText: { marginTop: 12, fontSize: 16, color: '#6B7280' },
   emptyText: { fontSize: 16, color: '#6B7280', textAlign: 'center' },

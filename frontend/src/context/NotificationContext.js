@@ -196,107 +196,139 @@ export const NotificationProvider = ({ children }) => {
         }
     };
 
-    // Load user data and initialize
-    useEffect(() => {
-        const initUser = async () => {
-            try {
-                const userDataStr = await AsyncStorage.getItem('userData');
-                if (userDataStr) {
-                    const userData = JSON.parse(userDataStr);
-                    let uid = userData.firebaseUid;
-                    if (!uid && userData.uid && typeof userData.uid === 'string') uid = userData.uid;
-                    if (!uid) uid = userData.id || userData.uid;
+    // Use a function that can be called to refresh user state from storage
+    const refreshUser = async () => {
+        try {
+            const userDataStr = await AsyncStorage.getItem('userData');
+            const authCompanyIdFromStorage = await AsyncStorage.getItem('authorityCompanyId');
 
-                    if (uid) {
-                        setCurrentUid(uid);
-                        await loadHistory(uid);
-                        await loadLastStatuses(uid);
-                    }
+            console.log('NotificationProvider: Refreshing user state. metadata:', {
+                hasUserData: !!userDataStr,
+                hasAuthCompanyId: !!authCompanyIdFromStorage,
+                prevRole: userRole,
+                prevUid: currentUid
+            });
 
-                    // Store user role for filtering
-                    const role = userData.role || 'citizen';
-                    setUserRole(role);
+            if (userDataStr) {
+                const userData = JSON.parse(userDataStr);
+                // Matches HomeScreen logic.
+                let uid = userData.firebaseUid;
+                if (!uid && userData.uid && typeof userData.uid === 'string') uid = userData.uid;
+                if (!uid) uid = userData.id || userData.uid;
 
-                    // Check if user is admin - CRITICAL: Always update this state
-                    const adminStatus = role === 'admin';
-                    //console.log('NotificationContext: Setting admin status - role:', role, 'adminStatus:', adminStatus);
-                    setIsAdmin(adminStatus);
+                const role = userData.role || 'citizen';
+                const compId = (role === 'authority') ? (userData.id || authCompanyIdFromStorage) : null;
 
-                    // Check if user is authority
-                    const authorityStatus = role === 'authority';
-                    setIsAuthority(authorityStatus);
-                    //console.log('NotificationContext: Authority check - role:', role, 'authorityStatus:', authorityStatus, 'userData.id:', userData.id);
+                console.log('NotificationProvider: New state targets:', { role, uid, compId });
 
-                    if (authorityStatus && userData.id) {
-                        //console.log('NotificationContext: Setting up authority with ID:', userData.id);
-                        setAuthorityCompanyId(userData.id);
-                        await loadAuthorityHistory(userData.id);
-                        await loadLastAssignmentCount(userData.id);
-                    } else {
-                        // Clear authority data for non-authority users
-                        //console.log('NotificationContext: Clearing authority data');
-                        setAuthorityHistory([]);
-                        setLastAssignmentCount(0);
-                        setAuthorityCompanyId(null);
-                    }
+                // Always set these to ensure context is in sync with latest storage
+                setCurrentUid(uid);
+                setUserRole(role);
+                setIsAdmin(role === 'admin');
+                setIsAuthority(role === 'authority');
 
-                    console.log('NotificationContext: User role:', role, 'isAdmin:', adminStatus, 'isAuthority:', authorityStatus);
-
-                    if (adminStatus) {
-                        await loadLastCounts();
-                        await loadAdminHistory(true);
-                    } else {
-                        // Clear admin data for non-admin users
-                        setAdminHistory([]);
-                        setLastCounts({ reports: 0, appeals: 0 });
-                    }
+                if (compId && compId !== authorityCompanyId) {
+                    console.log('NotificationProvider: Setting authority company ID:', compId);
+                    setAuthorityCompanyId(compId);
                 }
-            } catch (e) {
-                console.error("Failed to initialize user", e);
+
+                // Reset histories if user ID changed
+                if (uid && uid !== currentUid) {
+                    console.log('NotificationProvider: UID changed, clearing histories');
+                    setHistory([]);
+                    setAdminHistory([]);
+                    setAuthorityHistory([]);
+                    setLastStatuses({});
+                    lastStatusesRef.current = {};
+                    setLastCounts({ reports: 0, appeals: 0 });
+                    lastCountsRef.current = { reports: 0, appeals: 0 };
+                    setLastAssignmentCount(0);
+                    lastAssignmentCountRef.current = 0;
+                }
+            } else {
+                // No user logged in in storage
+                console.log('NotificationProvider: No user data in storage, resetting to guest/citizen');
+                setCurrentUid(null);
+                setUserRole('citizen');
+                setIsAdmin(false);
+                setIsAuthority(false);
+                setAuthorityCompanyId(null);
+                // Clear all states
+                setHistory([]);
+                setAdminHistory([]);
+                setAuthorityHistory([]);
+                setLastStatuses({});
+                lastStatusesRef.current = {};
+                setLastCounts({ reports: 0, appeals: 0 });
+                lastCountsRef.current = { reports: 0, appeals: 0 };
+                setLastAssignmentCount(0);
+                lastAssignmentCountRef.current = 0;
             }
-        };
-        initUser();
+        } catch (error) {
+            console.error('NotificationProvider: Error refreshing user:', error);
+        }
+    };
+
+    // Initial load and refresh on mount
+    useEffect(() => {
+        refreshUser();
     }, []);
 
+    // Load citizen-specific data when currentUid changes
+    useEffect(() => {
+        if (currentUid && userRole === 'citizen') {
+            loadHistory(currentUid);
+            loadLastStatuses(currentUid);
+        } else if (!currentUid) {
+            setHistory([]);
+            setLastStatuses({});
+            lastStatusesRef.current = {};
+        }
+    }, [currentUid, userRole]);
+
+    // Load admin-specific data when isAdmin or userRole changes
+    useEffect(() => {
+        if (isAdmin && userRole === 'admin') {
+            loadLastCounts();
+            loadAdminHistory(true);
+        } else {
+            setAdminHistory([]);
+            setLastCounts({ reports: 0, appeals: 0 });
+        }
+    }, [isAdmin, userRole]);
+
+    // Load authority-specific data when isAuthority, userRole, or authorityCompanyId changes
+    useEffect(() => {
+        if (isAuthority && userRole === 'authority' && authorityCompanyId) {
+            loadAuthorityHistory(authorityCompanyId);
+            loadLastAssignmentCount(authorityCompanyId);
+        } else {
+            setAuthorityHistory([]);
+            setLastAssignmentCount(0);
+        }
+    }, [isAuthority, userRole, authorityCompanyId]);
+
+
     const fetchComplaints = async () => {
+        // Don't poll on unauthenticated screens
+        const currentRoute = navigation.current?.getCurrentRoute?.()?.name;
+        const unauthenticatedScreens = ['Landing', 'Login', 'Signup'];
+
+        if (unauthenticatedScreens.includes(currentRoute)) {
+            //console.log("NotificationContext: Skipping polling on", currentRoute, "screen");
+            return;
+        }
+
+        // CRITICAL: Only poll complaints for citizens
+        if (userRole !== 'citizen' || !currentUid) {
+            //console.log("NotificationContext: Skipping complaint polling - user is", userRole, "or no UID");
+            return;
+        }
+
+        // console.log("NotificationContext: Polling for user:", currentUid);
+
         try {
-            // Don't poll on unauthenticated screens
-            const currentRoute = navigation.current?.getCurrentRoute?.()?.name;
-            const unauthenticatedScreens = ['Landing', 'Login', 'Signup'];
-
-            if (unauthenticatedScreens.includes(currentRoute)) {
-                //console.log("NotificationContext: Skipping polling on", currentRoute, "screen");
-                return;
-            }
-
-            const userDataStr = await AsyncStorage.getItem('userData');
-            if (!userDataStr) {
-                //console.log("NotificationContext: No userData in storage");
-                return;
-            }
-
-            const userData = JSON.parse(userDataStr);
-
-            // CRITICAL: Only poll complaints for citizens
-            const role = userData.role || 'citizen';
-            if (role !== 'citizen') {
-                //console.log("NotificationContext: Skipping complaint polling - user is", role);
-                return;
-            }
-
-            // CRITICAL FIX: Match HomeScreen logic. Prioritize firebaseUid.
-            let uid = userData.firebaseUid;
-            if (!uid && userData.uid && typeof userData.uid === 'string') uid = userData.uid;
-            if (!uid) uid = userData.id || userData.uid;
-
-            if (!uid) {
-                //console.log("NotificationContext: No UID found in userData");
-                return;
-            }
-
-            // console.log("NotificationContext: Polling for user:", uid);
-
-            const response = await api.get(`/complaints/citizen/${uid}`);
+            const response = await api.get(`/complaints/citizen/${currentUid}`);
             const complaints = response.data.complaints || [];
             //console.log("NotificationContext: Fetched", complaints.length, "complaints");
 
@@ -319,7 +351,7 @@ export const NotificationProvider = ({ children }) => {
             console.log("NotificationContext: Updated lastStatuses:", updated);
             setLastStatuses(updated);
             lastStatusesRef.current = updated; // Update ref
-            saveLastStatuses(updated, uid); // Persist to storage with user-specific key
+            saveLastStatuses(updated, currentUid); // Persist to storage with user-specific key
 
             // Trigger notification if changed
             if (changedComplaint) {
@@ -345,7 +377,7 @@ export const NotificationProvider = ({ children }) => {
                 };
 
                 showNotification(notifData);
-                addToHistory(notifData, uid);
+                addToHistory(notifData, currentUid);
             } else {
                 console.log("NotificationContext: No status changes detected");
             }
@@ -359,7 +391,10 @@ export const NotificationProvider = ({ children }) => {
     };
 
     useEffect(() => {
-        if (!currentUid) return; // Don't start polling until user is loaded
+        if (userRole !== 'citizen' || !currentUid) {
+            //console.log("NotificationContext: Skipping citizen polling - user is", userRole, "or no UID");
+            return;
+        }
 
         //console.log("NotificationContext: Starting polling for user:", currentUid);
         // Initial fetch
@@ -371,72 +406,52 @@ export const NotificationProvider = ({ children }) => {
             //console.log("NotificationContext: Stopping polling");
             clearInterval(interval);
         };
-    }, [currentUid]); // Re-run when user changes
+    }, [currentUid, userRole]); // Re-run when user changes
 
     // Poll for admin data (reports and appeals)
     const pollAdminData = async () => {
+        // CRITICAL: Double-check user role before polling
+        if (userRole !== 'admin') {
+            //console.log('AdminPolling: Skipping - user role is', userRole, 'not admin');
+            return;
+        }
+
+        // Check current route - don't poll on unauthenticated screens
+        const currentRoute = navigation.current?.getCurrentRoute?.()?.name;
+        const unauthenticatedScreens = ['Landing', 'Login', 'Signup'];
+
+        if (unauthenticatedScreens.includes(currentRoute)) {
+            //console.log('AdminPolling: Skipping - on unauthenticated screen:', currentRoute);
+            return;
+        }
+
+        console.log('AdminPolling: Fetching reports and appeals...');
+
         try {
-            // CRITICAL: Double-check user role before polling
-            const userDataStr = await AsyncStorage.getItem('userData');
-            if (userDataStr) {
-                const userData = JSON.parse(userDataStr);
-                const role = userData.role || 'citizen';
-                if (role !== 'admin') {
-                    //console.log('AdminPolling: Skipping - user role is', role, 'not admin');
-                    return;
-                }
-            } else {
-                //console.log('AdminPolling: Skipping - no user data');
-                return;
-            }
-
-            // Check current route - don't poll on unauthenticated screens
-            const currentRoute = navigation.current?.getCurrentRoute?.()?.name;
-            const unauthenticatedScreens = ['Landing', 'Login', 'Signup'];
-
-            if (unauthenticatedScreens.includes(currentRoute)) {
-                //console.log('AdminPolling: Skipping - on unauthenticated screen:', currentRoute);
-                return;
-            }
-
-            console.log('AdminPolling: Fetching reports and appeals...');
-
             // Fetch reports
             const reportsResponse = await api.get('/complaints/reports?status=pending');
             const pendingReports = reportsResponse.data?.reports || [];
-            const newReportsCount = pendingReports.length;
+            const currentReportIds = pendingReports.map(r => r.id);
 
             // Fetch appeals
             const appealsResponse = await api.get('/complaints/appeals?status=pending');
             const pendingAppeals = appealsResponse.data?.appeals || [];
-            const newAppealsCount = pendingAppeals.length;
-
-            console.log('AdminPolling: Current counts - Reports:', newReportsCount, 'Appeals:', newAppealsCount);
-            console.log('AdminPolling: Previous counts - Reports:', lastCountsRef.current.reports, 'Appeals:', lastCountsRef.current.appeals);
+            const currentAppealIds = pendingAppeals.map(a => a.id);
 
             // Update unread counts
-            setUnreadReportsCount(newReportsCount);
-            setUnreadAppealsCount(newAppealsCount);
+            setUnreadReportsCount(pendingReports.length);
+            setUnreadAppealsCount(pendingAppeals.length);
 
-            // Check if there are new items
-            const prevCounts = lastCountsRef.current;
-            const newReports = newReportsCount > prevCounts.reports;
-            const newAppeals = newAppealsCount > prevCounts.appeals;
+            // --- TRACK NEW REPORTS BY ID ---
+            const lastReportIdsStr = await AsyncStorage.getItem('adminKnownReportIds');
+            let lastReportIds = lastReportIdsStr ? JSON.parse(lastReportIdsStr) : [];
 
-            console.log('AdminPolling: New reports?', newReports, 'New appeals?', newAppeals);
-
-            // Show notification for new items
-            if (newReports) {
-                const diff = newReportsCount - prevCounts.reports;
-                console.log('AdminPolling: Showing notification for', diff, 'new report(s)');
-
-                // Get the latest reports to include complaint IDs
-                const latestReports = pendingReports.slice(0, diff);
-
-                latestReports.forEach((report, index) => {
-                    console.log('Creating notification for report:', report.id, 'complaintId:', report.complaintId);
+            const newReportEntries = pendingReports.filter(r => !lastReportIds.includes(r.id));
+            if (newReportEntries.length > 0) {
+                console.log('AdminPolling: Detected', newReportEntries.length, 'new reports');
+                newReportEntries.forEach((report, index) => {
                     const notifData = {
-                        uniqId: Date.now().toString() + '_' + index,
+                        uniqId: `admin_report_${report.id}_${Date.now()}`,
                         type: 'report',
                         title: 'New Complaint Report',
                         message: report.Complaint?.title || `Complaint #${report.complaintId} has been reported`,
@@ -448,21 +463,22 @@ export const NotificationProvider = ({ children }) => {
                         reportId: report.id,
                         reason: report.reason
                     };
-                    console.log('Notification data:', notifData);
                     showAdminNotification(notifData);
                     addToAdminHistory(notifData);
                 });
-            } else if (newAppeals) {
-                const diff = newAppealsCount - prevCounts.appeals;
-                console.log('AdminPolling: Showing notification for', diff, 'new appeal(s)');
+            }
+            await AsyncStorage.setItem('adminKnownReportIds', JSON.stringify(currentReportIds));
 
-                // Get the latest appeals to include complaint IDs
-                const latestAppeals = pendingAppeals.slice(0, diff);
+            // --- TRACK NEW APPEALS BY ID ---
+            const lastAppealIdsStr = await AsyncStorage.getItem('adminKnownAppealIds');
+            let lastAppealIds = lastAppealIdsStr ? JSON.parse(lastAppealIdsStr) : [];
 
-                latestAppeals.forEach((appeal, index) => {
-                    console.log('Creating notification for appeal:', appeal.id, 'title:', appeal.title);
+            const newAppealEntries = pendingAppeals.filter(a => !lastAppealIds.includes(a.id));
+            if (newAppealEntries.length > 0) {
+                console.log('AdminPolling: Detected', newAppealEntries.length, 'new appeals');
+                newAppealEntries.forEach((appeal, index) => {
                     const notifData = {
-                        uniqId: Date.now().toString() + '_' + index,
+                        uniqId: `admin_appeal_${appeal.id}_${Date.now()}`,
                         type: 'appeal',
                         title: 'New Complaint Appeal',
                         message: appeal.title || `Complaint #${appeal.id} has been appealed`,
@@ -473,18 +489,18 @@ export const NotificationProvider = ({ children }) => {
                         complaintId: appeal.id,
                         appealReason: appeal.reason
                     };
-                    console.log('Notification data:', notifData);
                     showAdminNotification(notifData);
                     addToAdminHistory(notifData);
                 });
             }
+            await AsyncStorage.setItem('adminKnownAppealIds', JSON.stringify(currentAppealIds));
 
-            // Update stored counts
-            const newCounts = { reports: newReportsCount, appeals: newAppealsCount };
+            // Maintenance: Update stored counts for any UI that might still need them
+            const newCounts = { reports: pendingReports.length, appeals: pendingAppeals.length };
             setLastCounts(newCounts);
             lastCountsRef.current = newCounts;
             await saveLastCounts(newCounts);
-            console.log('AdminPolling: Updated counts to:', newCounts);
+            console.log('AdminPolling: Updated status with current IDs and counts');
 
         } catch (error) {
             console.error('Admin polling error:', error.message, error);
@@ -493,82 +509,122 @@ export const NotificationProvider = ({ children }) => {
 
     // Poll for authority assignments
     const pollAuthorityAssignments = async () => {
+        // Double-check user role before polling
+        if (userRole !== 'authority' || !authorityCompanyId) {
+            console.log('AuthorityPolling: Skipping - user role is', userRole, 'not authority or no company ID');
+            return;
+        }
+
+        // Check current route - don't poll on unauthenticated screens
+        const currentRoute = navigation.current?.getCurrentRoute?.()?.name;
+        const unauthenticatedScreens = ['Landing', 'Login', 'Signup'];
+
+        if (unauthenticatedScreens.includes(currentRoute)) {
+            console.log('AuthorityPolling: Skipping - on unauthenticated screen:', currentRoute);
+            return;
+        }
+
+        console.log('AuthorityPolling: Fetching assignments for company:', authorityCompanyId);
+
         try {
-            // Double-check user role before polling
-            const userDataStr = await AsyncStorage.getItem('userData');
-            if (userDataStr) {
-                const userData = JSON.parse(userDataStr);
-                const role = userData.role || 'citizen';
-                if (role !== 'authority') {
-                    console.log('AuthorityPolling: Skipping - user role is', role, 'not authority');
-                    return;
-                }
+            // Fetch complaints assigned to this authority
+            const response = await api.get(`/complaints/authority/${authorityCompanyId}`);
+            const complaints = response.data?.complaints || [];
+            const currentIds = complaints.map(c => c.id);
 
-                const companyId = userData.id;
-                if (!companyId) {
-                    console.log('AuthorityPolling: No company ID found');
-                    return;
-                }
+            // --- CHECK FOR DELETED COMPLAINTS ---
+            // We compare current assigned IDs with what we previously knew
+            const lastKnownIdsStr = await AsyncStorage.getItem(`authorityAssignedIds_${authorityCompanyId}`);
+            let lastKnownIds = lastKnownIdsStr ? JSON.parse(lastKnownIdsStr) : [];
 
-                // Check current route - don't poll on unauthenticated screens
-                const currentRoute = navigation.current?.getCurrentRoute?.()?.name;
-                const unauthenticatedScreens = ['Landing', 'Login', 'Signup'];
-
-                if (unauthenticatedScreens.includes(currentRoute)) {
-                    console.log('AuthorityPolling: Skipping - on unauthenticated screen:', currentRoute);
-                    return;
-                }
-
-                console.log('AuthorityPolling: Fetching assignments for company:', companyId);
-
-                // Fetch complaints assigned to this authority
-                const response = await api.get(`/complaints/authority/${companyId}`);
-                const complaints = response.data?.complaints || [];
-                const currentCount = complaints.length;
-
-                console.log('AuthorityPolling: Current assignment count:', currentCount);
-                console.log('AuthorityPolling: Previous assignment count:', lastAssignmentCountRef.current);
-
-                // Check if there are new assignments
-                const hasNewAssignments = currentCount > lastAssignmentCountRef.current;
-                console.log('AuthorityPolling: New assignments?', hasNewAssignments);
-
-                if (hasNewAssignments) {
-                    const newCount = currentCount - lastAssignmentCountRef.current;
-                    console.log('AuthorityPolling: New assignments detected:', newCount);
-
-                    // Get the newest complaints
-                    const newestComplaints = complaints
-                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                        .slice(0, newCount);
-
-                    // Create notifications for each new assignment
-                    newestComplaints.forEach(complaint => {
+            if (lastKnownIds.length > 0) {
+                const deletedIds = lastKnownIds.filter(id => !currentIds.includes(id));
+                if (deletedIds.length > 0) {
+                    console.log('AuthorityPolling: Detected deleted complaints:', deletedIds);
+                    deletedIds.forEach(id => {
                         const notifData = {
-                            uniqId: `authority_${complaint.id}_${Date.now()}`,
-                            title: 'New Assignment',
-                            message: `New complaint: ${complaint.title}`,
+                            uniqId: `deleted_${id}_${Date.now()}`,
+                            title: 'Complaint Removed',
+                            message: `Complaint #${id} was removed by Admin moderation.`,
                             timestamp: new Date().toISOString(),
                             read: false,
-                            type: 'assignment',
+                            type: 'deletion',
+                            complaintId: id
+                        };
+                        showAuthorityNotification(notifData);
+                        addToAuthorityHistory(notifData, authorityCompanyId);
+                    });
+                }
+            }
+            // Update last known IDs for next poll
+            await AsyncStorage.setItem(`authorityAssignedIds_${authorityCompanyId}`, JSON.stringify(currentIds));
+
+            // --- CHECK FOR NEW ASSIGNMENTS OR FORWARDED APPEALS ---
+            for (const complaint of complaints) {
+                const isForwarded = complaint.forwardedByAdmin === true && complaint.appealStatus === 'approved';
+
+                // Track status per complaint to detect updates
+                const statusKey = `authorityLastStatus_${authorityCompanyId}_${complaint.id}`;
+                const lastStatus = await AsyncStorage.getItem(statusKey);
+                const currentStatusStr = `${complaint.currentStatus}_${complaint.forwardedByAdmin}_${complaint.appealStatus}`;
+
+                if (lastStatus !== currentStatusStr) {
+                    // Status changed OR first time seeing this complaint
+                    if (isForwarded && (!lastStatus || !lastStatus.includes('approved'))) {
+                        console.log('AuthorityPolling: Forwarded appeal detected (first sighting or update) for complaint:', complaint.id);
+                        const notifData = {
+                            uniqId: `forwarded_${complaint.id}_${Date.now()}`,
+                            title: 'Appeal Forwarded',
+                            message: `Admin forwarded appeal for re-investigation: ${complaint.title}`,
+                            timestamp: new Date().toISOString(),
+                            read: false,
+                            type: 'forwarded_appeal',
                             complaintId: complaint.id,
                             complaint: complaint
                         };
-                        console.log('AuthorityPolling: Creating notification:', notifData);
                         showAuthorityNotification(notifData);
-                        addToAuthorityHistory(notifData, companyId);
+                        addToAuthorityHistory(notifData, authorityCompanyId);
+                    }
+                }
+                await AsyncStorage.setItem(statusKey, currentStatusStr);
+            }
+
+            const currentCount = complaints.length;
+            console.log('AuthorityPolling: Current assignment count:', currentCount);
+
+            // Initial count check logic for brand new IDs
+            const hasNewAssignments = currentCount > lastAssignmentCountRef.current;
+
+            if (hasNewAssignments) {
+                const diff = currentCount - lastKnownIds.length;
+                if (diff > 0) {
+                    const newEntries = complaints.filter(c => !lastKnownIds.includes(c.id));
+                    newEntries.forEach(complaint => {
+                        // Only trigger "New Assignment" if it's not a forwarded appeal (which we handle above)
+                        if (!(complaint.forwardedByAdmin === true && complaint.appealStatus === 'approved')) {
+                            const notifData = {
+                                uniqId: `authority_${complaint.id}_${Date.now()}`,
+                                title: 'New Assignment',
+                                message: `New complaint assigned: ${complaint.title}`,
+                                timestamp: new Date().toISOString(),
+                                read: false,
+                                type: 'assignment',
+                                complaintId: complaint.id,
+                                complaint: complaint
+                            };
+                            showAuthorityNotification(notifData);
+                            addToAuthorityHistory(notifData, authorityCompanyId);
+                        }
                     });
                 }
-
-                // Update stored count
-                setLastAssignmentCount(currentCount);
-                lastAssignmentCountRef.current = currentCount;
-                await saveLastAssignmentCount(currentCount, companyId);
-                console.log('AuthorityPolling: Updated assignment count to:', currentCount, 'for company:', companyId);
-
-            } else {
-                console.log('AuthorityPolling: No user data found');
             }
+
+            // Update stored count for simple threshold checks
+            setLastAssignmentCount(currentCount);
+            lastAssignmentCountRef.current = currentCount;
+            await saveLastAssignmentCount(currentCount, authorityCompanyId);
+            console.log('AuthorityPolling: Updated assignment count to:', currentCount, 'for company:', authorityCompanyId);
+
         } catch (error) {
             console.error('Authority polling error:', error.message, error);
         }
@@ -577,44 +633,43 @@ export const NotificationProvider = ({ children }) => {
 
     // Start admin polling ONLY when user is admin
     useEffect(() => {
-        // CRITICAL: Must be admin role, not just isAdmin flag
-        const shouldPoll = isAdmin && userRole === 'admin';
+        // Start polling only if user is admin
+        const shouldPoll = userRole === 'admin';
 
         if (!shouldPoll) {
-            console.log('AdminPolling: Not starting - isAdmin:', isAdmin, 'userRole:', userRole);
+            console.log('AdminPollingEffect: Skipping - role is:', userRole);
             return;
         }
 
-        console.log('AdminPolling: Starting admin notifications polling');
+        console.log('AdminPollingEffect: ACTIVE (Role: admin)');
         pollAdminData(); // Initial fetch
 
-        // Poll every 15 seconds
         const interval = setInterval(pollAdminData, 15000);
         return () => {
-            console.log('AdminPolling: Stopping admin notifications polling');
+            console.log('AdminPollingEffect: STOPPED');
             clearInterval(interval);
         };
-    }, [isAdmin, userRole]); // Re-run when admin status or role changes
+    }, [userRole, currentUid]); // Depend on userRole and UID to start/stop polling dynamically
 
     // Start authority polling ONLY when user is authority
     useEffect(() => {
-        const shouldPoll = isAuthority && userRole === 'authority' && authorityCompanyId;
+        const shouldPoll = userRole === 'authority' && authorityCompanyId;
 
         if (!shouldPoll) {
-            console.log('AuthorityPolling: Not starting - isAuthority:', isAuthority, 'userRole:', userRole, 'companyId:', authorityCompanyId);
+            console.log('AuthorityPollingEffect: Skipping - role is:', userRole, 'compId:', authorityCompanyId);
             return;
         }
 
-        console.log('AuthorityPolling: Starting authority notifications polling');
+        console.log('AuthorityPollingEffect: ACTIVE (Role: authority, CompId:', authorityCompanyId, ')');
         pollAuthorityAssignments(); // Initial fetch
 
-        // Poll every 15 seconds
-        const interval = setInterval(pollAuthorityAssignments, 15000);
+        // Poll every 20 seconds
+        const interval = setInterval(pollAuthorityAssignments, 20000);
         return () => {
-            console.log('AuthorityPolling: Stopping authority notifications polling');
+            console.log('AuthorityPollingEffect: STOPPED');
             clearInterval(interval);
         };
-    }, [isAuthority, userRole, authorityCompanyId]); // Re-run when authority status changes
+    }, [userRole, authorityCompanyId, currentUid]); // Depend on role, company, and UID
 
     const showNotification = (notifData) => {
         // CRITICAL: Only show citizen notifications for citizens (not admins or authorities)
@@ -696,8 +751,9 @@ export const NotificationProvider = ({ children }) => {
         console.log('showAdminNotification checks - isAdmin:', isAdmin, 'userRole:', userRole);
 
         // CRITICAL: Only show notifications for admins (double check with both isAdmin and userRole)
-        if (!isAdmin || userRole !== 'admin') {
-            console.log("AdminNotificationContext: Skipping notification - user is not admin. isAdmin:", isAdmin, "userRole:", userRole);
+        // Use userRole state primarily as it's more reliable after refreshes
+        if (userRole !== 'admin') {
+            console.log("AdminNotificationContext: Skipping notification - user is not admin. Role:", userRole);
             return;
         }
 
@@ -734,8 +790,15 @@ export const NotificationProvider = ({ children }) => {
 
     const handleAdminPress = () => {
         if (adminNotification && navigation.current) {
-            // Navigate to admin dashboard flags tab
-            if (adminNotification.type === 'report' || adminNotification.type === 'appeal') {
+            // Priority: Navigate to specific complaint if ID exists
+            if (adminNotification.complaintId) {
+                console.log('AdminToast: Navigating to AdminComplaintDetail for ID:', adminNotification.complaintId);
+                navigation.current.navigate('AdminComplaintDetail', {
+                    complaintId: adminNotification.complaintId
+                });
+            }
+            // Fallback: Navigate to admin dashboard flags tab
+            else if (adminNotification.type === 'report' || adminNotification.type === 'appeal') {
                 navigation.current.navigate('AdminDashboard', {
                     initialTab: 'flags',
                     flagTab: adminNotification.type === 'report' ? 'reported' : 'appealed'
@@ -775,6 +838,18 @@ export const NotificationProvider = ({ children }) => {
         const updatedHistory = adminHistory.map(n => ({ ...n, read: true }));
         setAdminHistory(updatedHistory);
         await AsyncStorage.setItem('adminNotificationHistory', JSON.stringify(updatedHistory));
+    };
+
+    const clearAllNotifications = async () => {
+        setHistory([]);
+        setAdminHistory([]);
+        setAuthorityHistory([]);
+        await AsyncStorage.removeItem(getStorageKey('notificationHistory', currentUid));
+        await AsyncStorage.removeItem('adminNotificationHistory');
+        if (authorityCompanyId) {
+            await AsyncStorage.removeItem(`authorityNotificationHistory_${authorityCompanyId}`);
+        }
+        console.log('All notification histories cleared.');
     };
 
     // Test function to manually trigger admin notification
@@ -820,7 +895,7 @@ export const NotificationProvider = ({ children }) => {
         console.log('showAuthorityNotification checks - isAuthority:', isAuthority, 'userRole:', userRole);
 
         // Only show notifications for authorities
-        if (!isAuthority || userRole !== 'authority') {
+        if (userRole !== 'authority') {
             console.log("AuthorityNotificationContext: Skipping notification - user is not authority. isAuthority:", isAuthority, "userRole:", userRole);
             return;
         }
@@ -858,7 +933,7 @@ export const NotificationProvider = ({ children }) => {
 
     const handleAuthorityPress = () => {
         if (authorityNotification && navigation.current && authorityNotification.complaintId) {
-            navigation.current.navigate('ComplaintDetails', {
+            navigation.current.navigate('AuthorityComplaintDetail', {
                 id: authorityNotification.complaintId
             });
             dismissAuthorityNotification();
@@ -968,9 +1043,16 @@ export const NotificationProvider = ({ children }) => {
 
                     {/* Authority notification toast - ONLY for authorities */}
                     {userRole === 'authority' && authorityNotification && (
-                        <Animated.View style={[styles.toastContainer, { opacity: authorityFadeAnim }]}>
+                        <Animated.View style={[
+                            styles.toastContainer,
+                            { opacity: authorityFadeAnim },
+                            authorityNotification.type === 'deletion' && { borderLeftColor: '#EF4444' }
+                        ]}>
                             <TouchableOpacity style={styles.content} onPress={handleAuthorityPress}>
-                                <View style={styles.iconBox}>
+                                <View style={[
+                                    styles.iconBox,
+                                    authorityNotification.type === 'deletion' && { backgroundColor: '#EF4444' }
+                                ]}>
                                     <Bell size={20} color="white" />
                                 </View>
                                 <View style={{ flex: 1 }}>

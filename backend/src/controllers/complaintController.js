@@ -38,7 +38,7 @@ exports.createComplaint = async (req, res) => {
     });
 
     if (user && user.Citizen && user.Citizen.isBanned) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         message: 'Your account has been banned. You cannot submit complaints.',
         banned: true,
         banReason: user.Citizen.banReason,
@@ -406,7 +406,7 @@ exports.getAllComplaints = async (req, res) => {
       {
         model: ComplaintImages,
         as: 'images',
-        attributes: ['id', 'imageURL'],
+        attributes: ['id', 'imageURL', 'type'],
       }
     ];
 
@@ -511,7 +511,7 @@ exports.getComplaintsByCitizen = async (req, res) => {
         {
           model: ComplaintImages,
           as: 'images',
-          attributes: ['id', 'imageURL'],
+          attributes: ['id', 'imageURL', 'type'],
         },
       ],
       order: [['createdAt', 'DESC']],
@@ -588,7 +588,7 @@ exports.getComplaintsByAuthority = async (req, res) => {
         {
           model: ComplaintImages,
           as: 'images',
-          attributes: ['id', 'imageURL'],
+          attributes: ['id', 'imageURL', 'type'],
         },
       ],
       order: [
@@ -626,7 +626,7 @@ exports.getComplaintById = async (req, res) => {
       {
         model: ComplaintImages,
         as: 'images',
-        attributes: ['id', 'imageURL'],
+        attributes: ['id', 'imageURL', 'type'],
       },
     ];
 
@@ -740,7 +740,7 @@ exports.updateComplaintStatus = async (req, res) => {
     // Upload images if provided
     if (imageFiles && imageFiles.length > 0) {
       const bucketName = 'cityzen-media';
-      const imageType = currentStatus === 'in_progress' ? 'progress' : (currentStatus === 'resolved' ? 'resolution' : 'initial');
+      const imageType = currentStatus === 'resolved' ? 'resolution' : 'progress';
 
       for (const imageFile of imageFiles) {
         const filePath = `complaint_images/${id}_${Date.now()}_${imageFile.originalname}`;
