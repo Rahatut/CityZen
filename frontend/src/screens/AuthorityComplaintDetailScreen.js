@@ -12,6 +12,9 @@ import {
 import api from '../services/api';
 import * as ImagePicker from 'expo-image-picker';
 
+import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export default function AuthorityComplaintDetailScreen({ route, navigation, onLogout, darkMode, toggleDarkMode }) {
     const { id, complaintId, initialData } = route.params || {};
     const complaintIdToFetch = id || complaintId;
@@ -48,7 +51,6 @@ export default function AuthorityComplaintDetailScreen({ route, navigation, onLo
         }
     }, [complaintIdToFetch, initialData]); // Removed 'complaint' to avoid infinite loop
 
-    const { useFocusEffect } = require('@react-navigation/native');
     useFocusEffect(
         React.useCallback(() => {
             fetchComplaintData();

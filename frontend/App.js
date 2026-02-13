@@ -8,12 +8,18 @@ import { NotificationProvider, useNotification, useAdminNotification } from './s
 // Helper to bridge navigation to context
 const NavigationAware = () => {
   const navigation = useNavigation();
-  const { setNavigation } = useNotification();
+  const { setNavigation, refreshUser } = useNotification();
   const { setNavigation: setAdminNavigation } = useAdminNotification();
 
   React.useEffect(() => {
+    console.log('NavigationAware: Route changed, syncing navigation and refreshing user...');
     setNavigation(navigation);
     setAdminNavigation(navigation);
+    // Refresh user role state on every navigation transition
+    if (refreshUser) {
+      console.log('NavigationAware: Triggering refreshUser()');
+      refreshUser();
+    }
   }, [navigation]);
 
   return null;
@@ -39,6 +45,7 @@ import SimilarComplaintsScreen from './src/screens/SimilarComplaintsScreen';
 import AddEvidenceScreen from './src/screens/AddEvidenceScreen'; // Import new screen
 import AuthorityComplaintListScreen from './src/screens/AuthorityComplaintListScreen';
 import AuthorityComplaintDetailScreen from './src/screens/AuthorityComplaintDetailScreen';
+import AdminComplaintDetailScreen from './src/screens/AdminComplaintDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -111,6 +118,7 @@ export default function App() {
             <Stack.Screen name="AuthorityComplaintList">{(props) => <AuthorityComplaintListScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="AuthorityComplaintDetail">{(props) => <AuthorityComplaintDetailScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="AdminDashboard">{(props) => <AdminDashboardScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
+            <Stack.Screen name="AdminComplaintDetail">{(props) => <AdminComplaintDetailScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="AddEvidence">{(props) => <AddEvidenceScreen {...props} />}</Stack.Screen>
           </Stack.Navigator>
         </NavigationContainer>

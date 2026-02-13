@@ -3,7 +3,7 @@ import { View, StyleSheet, BackHandler, Alert, TouchableOpacity, Text } from 're
 import { BarChart3, AlertTriangle, Settings, ShieldCheck } from 'lucide-react-native';
 
 // Import the top navigation used by citizens
-import Navigation from '../components/Navigation'; 
+import Navigation from '../components/Navigation';
 
 // Import modular sub-screens
 import AdminStatusScreen from './AdminStatusScreen';
@@ -51,10 +51,10 @@ export default function AdminDashboardScreen({ route, navigation, onLogout, dark
   const renderContent = () => {
     switch (activeTab) {
       case 'overview': return <AdminStatusScreen darkMode={darkMode} onJump={jumpToFlags} />;
-      case 'flags':    return <AdminFlagsScreen darkMode={darkMode} defaultTab={initialFlagTab} />;
-      case 'system':   return <AdminSystemScreen darkMode={darkMode} />;
-      case 'profile':  return <AdminProfileScreen darkMode={darkMode} onLogout={onLogout} />;
-      default:         return <AdminStatusScreen darkMode={darkMode} />;
+      case 'flags': return <AdminFlagsScreen darkMode={darkMode} defaultTab={initialFlagTab} navigation={navigation} />;
+      case 'system': return <AdminSystemScreen darkMode={darkMode} />;
+      case 'profile': return <AdminProfileScreen darkMode={darkMode} onLogout={onLogout} />;
+      default: return <AdminStatusScreen darkMode={darkMode} />;
     }
   };
 
@@ -62,7 +62,7 @@ export default function AdminDashboardScreen({ route, navigation, onLogout, dark
     <View style={[styles.container, darkMode && styles.darkContainer]}>
       {/* Top Header (Same as Citizen Space) */}
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
-      
+
       <View style={styles.mainContent}>
         {renderContent()}
       </View>
@@ -81,7 +81,7 @@ export default function AdminDashboardScreen({ route, navigation, onLogout, dark
 const TabItem = ({ icon: Icon, label, active, onPress }) => (
   <TouchableOpacity style={styles.navItem} onPress={onPress}>
     <Icon size={22} color={active ? '#1E88E5' : '#9CA3AF'} />
-    <Text style={[styles.navLabel, active && {color: '#1E88E5', fontWeight: 'bold'}]}>{label}</Text>
+    <Text style={[styles.navLabel, active && { color: '#1E88E5', fontWeight: 'bold' }]}>{label}</Text>
   </TouchableOpacity>
 );
 

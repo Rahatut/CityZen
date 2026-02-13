@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput, KeyboardAvoidingView } from 'react-native';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
 import { MapPin, Calendar, Heart, ArrowLeft, CheckCircle, Circle, AlertCircle, Camera, X, Plus } from 'lucide-react-native';
@@ -14,13 +16,13 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [complaint, setComplaint] = useState(null);
-  const [retryTick, setRetryTick] = useState(0);
+  const [userData, setUserData] = useState(null);
+
   // Report modal state
   const [reportVisible, setReportVisible] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportDescription, setReportDescription] = useState('');
   const [reportSubmitting, setReportSubmitting] = useState(false);
-
 
   // Appeal & Rating state
   const [rating, setRating] = useState(0);
@@ -29,6 +31,18 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const [appealReason, setAppealReason] = useState('');
   const [appealImages, setAppealImages] = useState([]);
   const [appealSubmitting, setAppealSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const jsonValue = await AsyncStorage.getItem('userData');
+        if (jsonValue != null) setUserData(JSON.parse(jsonValue));
+      } catch (e) {
+        console.error('Error fetching userData from storage:', e);
+      }
+    };
+    fetchUser();
+  }, []);
 
 
   const REPORT_REASONS = [
@@ -60,12 +74,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const currentStep = statusToStepIndex[(complaint?.currentStatus || 'pending')] ?? 0;
 
   const handleUpvote = async () => {
-    // This requires userData context or prop, but we only have onLogout.
-    // We'll need to fetch user data from storage here just like FeedScreen
     try {
-      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
-      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
-
       if (!userData || !userData.firebaseUid) {
         Alert.alert('Error', 'Please login to upvote');
         return;
@@ -74,7 +83,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
       const res = await api.post(`/complaints/${complaintIdToFetch}/upvote`, { citizenUid: userData.firebaseUid });
       if (res.data && res.data.upvotes !== undefined) {
         setComplaint(prev => ({ ...prev, upvotes: res.data.upvotes, hasUpvoted: true }));
-        setUpvotes(res.data.upvotes); // Sync local state
+        setUpvotes(res.data.upvotes);
       }
     } catch (e) {
       if (e.response && e.response.status === 400) {
@@ -89,8 +98,6 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const handleRating = async (stars) => {
     try {
       if (ratingSubmitting) return;
-      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
-      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
       if (!userData || !userData.firebaseUid) return Alert.alert('Error', 'Please login to rate');
 
       setRatingSubmitting(true);
@@ -110,10 +117,10 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   };
 
   const handlePickAppealImage = async () => {
-    const { status } = await import('expo-image-picker').then(m => m.requestCameraPermissionsAsync());
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') return Alert.alert('Permission Needed', 'Camera permission is required.');
 
-    const result = await import('expo-image-picker').then(m => m.launchCameraAsync({ quality: 0.7 }));
+    const result = await ImagePicker.launchCameraAsync({ quality: 0.7 });
     if (!result.canceled && result.assets) {
       setAppealImages(prev => [...prev, result.assets[0].uri]);
     }
@@ -123,9 +130,6 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
     try {
       if (appealSubmitting) return;
       if (!appealReason) return Alert.alert('Error', 'Please provide a reason for appeal.');
-
-      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
-      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
       if (!userData || !userData.firebaseUid) return Alert.alert('Error', 'Please login to appeal');
 
       setAppealSubmitting(true);
@@ -163,10 +167,8 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
 
   const submitReport = async () => {
     try {
-      if (reportSubmitting) return; // Prevent double submission
+      if (reportSubmitting) return;
 
-      const jsonValue = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('userData'));
-      const userData = jsonValue != null ? JSON.parse(jsonValue) : null;
       if (!userData || !userData.firebaseUid) {
         Alert.alert('Error', 'Please login to report');
         return;

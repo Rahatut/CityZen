@@ -176,13 +176,17 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
 
 
   useEffect(() => {
-    const initializeDashboard = async () => {
-      await fetchProfile(); // Wait for profile to set companyId
-      fetchComplaints(); // Then fetch complaints with the correct companyId
-      fetchCategories();
-    };
-    initializeDashboard();
+    fetchProfile();
+    fetchCategories();
   }, []);
+
+  // Refresh complaints on focus
+  const { useFocusEffect } = require('@react-navigation/native');
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchComplaints();
+    }, [selectedCompany])
+  );
   // Handle company selection
   const handleCompanySelect = async (companyId) => {
     setSelectedCompany(companyId);
