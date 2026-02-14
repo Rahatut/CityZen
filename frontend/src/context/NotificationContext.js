@@ -234,33 +234,31 @@ export const NotificationProvider = ({ children }) => {
 
                 // Reset histories if user ID changed
                 if (uid && uid !== currentUid) {
-                    console.log('NotificationProvider: UID changed, clearing histories');
+                    console.log('NotificationProvider: UID changed, clearing citizen/authority histories only (preserving admin)');
                     setHistory([]);
-                    setAdminHistory([]);
+                    // DO NOT CLEAR adminHistory - it should persist across logout/login
                     setAuthorityHistory([]);
                     setLastStatuses({});
                     lastStatusesRef.current = {};
-                    setLastCounts({ reports: 0, appeals: 0 });
-                    lastCountsRef.current = { reports: 0, appeals: 0 };
+                    // DO NOT CLEAR lastCounts - admin counts should persist
                     setLastAssignmentCount(0);
                     lastAssignmentCountRef.current = 0;
                 }
             } else {
                 // No user logged in in storage
-                console.log('NotificationProvider: No user data in storage, resetting to guest/citizen');
+                console.log('NotificationProvider: No user data in storage, resetting to guest/citizen (preserving admin history)');
                 setCurrentUid(null);
                 setUserRole('citizen');
                 setIsAdmin(false);
                 setIsAuthority(false);
                 setAuthorityCompanyId(null);
-                // Clear all states
+                // Clear citizen and authority states only
                 setHistory([]);
-                setAdminHistory([]);
+                // DO NOT CLEAR adminHistory - it should persist even when logged out
                 setAuthorityHistory([]);
                 setLastStatuses({});
                 lastStatusesRef.current = {};
-                setLastCounts({ reports: 0, appeals: 0 });
-                lastCountsRef.current = { reports: 0, appeals: 0 };
+                // Keep admin counts for when admin logs back in
                 setLastAssignmentCount(0);
                 lastAssignmentCountRef.current = 0;
             }
@@ -852,6 +850,29 @@ export const NotificationProvider = ({ children }) => {
         console.log('All notification histories cleared.');
     };
 
+    // Delete individual notifications
+    const deleteNotification = async (notifId) => {
+        const updatedHistory = history.filter(n => n.uniqId !== notifId);
+        setHistory(updatedHistory);
+        const key = getStorageKey('notificationHistory', currentUid);
+        await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
+    };
+
+    const deleteAdminNotification = async (notifId) => {
+        const updatedHistory = adminHistory.filter(n => n.uniqId !== notifId);
+        setAdminHistory(updatedHistory);
+        await AsyncStorage.setItem('adminNotificationHistory', JSON.stringify(updatedHistory));
+    };
+
+    const deleteAuthorityNotification = async (notifId) => {
+        const updatedHistory = authorityHistory.filter(n => n.uniqId !== notifId);
+        setAuthorityHistory(updatedHistory);
+        if (authorityCompanyId) {
+            const key = `authorityNotificationHistory_${authorityCompanyId}`;
+            await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
+        }
+    };
+
     // Test function to manually trigger admin notification
     const testAdminNotification = () => {
         console.log('TEST: Manually triggering admin notification');
@@ -982,7 +1003,7 @@ export const NotificationProvider = ({ children }) => {
     };
 
     return (
-        <NotificationContext.Provider value={{ setNavigation, history, notification, markAsRead, markAsUnread, markAllAsRead }}>
+        <NotificationContext.Provider value={{ setNavigation, history, notification, markAsRead, markAsUnread, markAllAsRead, deleteNotification }}>
             <AdminNotificationContext.Provider value={{
                 setNavigation,
                 adminHistory,
@@ -992,6 +1013,7 @@ export const NotificationProvider = ({ children }) => {
                 markAdminAsRead,
                 markAdminAsUnread,
                 markAllAdminAsRead,
+                deleteAdminNotification,
                 testAdminNotification,
                 isAdmin
             }}>
@@ -1002,6 +1024,7 @@ export const NotificationProvider = ({ children }) => {
                     markAuthorityAsRead,
                     markAuthorityAsUnread,
                     markAllAuthorityAsRead,
+                    deleteAuthorityNotification,
                     testAuthorityNotification,
                     isAuthority
                 }}>

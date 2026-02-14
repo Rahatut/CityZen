@@ -12,15 +12,15 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
   const navigation = navigationProp || navigationHook;
 
   // Citizen state
-  const { history, markAsRead, markAsUnread, markAllAsRead } = useNotification();
+  const { history, markAsRead, markAsUnread, markAllAsRead, deleteNotification } = useNotification();
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
   // Admin state
-  const { adminHistory, markAdminAsRead, markAdminAsUnread, markAllAdminAsRead } = useAdminNotification();
+  const { adminHistory, markAdminAsRead, markAdminAsUnread, markAllAdminAsRead, deleteAdminNotification } = useAdminNotification();
   const [markingAllAdminRead, setMarkingAllAdminRead] = useState(false);
 
   // Authority state
-  const { authorityHistory, markAuthorityAsRead, markAuthorityAsUnread, markAllAuthorityAsRead, getAuthorityUnreadCount } = useAuthorityNotification();
+  const { authorityHistory, markAuthorityAsRead, markAuthorityAsUnread, markAllAuthorityAsRead, deleteAuthorityNotification, getAuthorityUnreadCount } = useAuthorityNotification();
   const [markingAllAuthorityRead, setMarkingAllAuthorityRead] = useState(false);
 
   // Common state
@@ -201,7 +201,15 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                   {new Date(notif.timestamp).toLocaleString()}
                 </Text>
               </View>
-              <ChevronRight size={16} color="#9CA3AF" />
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  deleteNotification(notif.uniqId);
+                }}
+              >
+                <X size={16} color="#EF4444" />
+              </TouchableOpacity>
             </TouchableOpacity>
           ))}
         </View>
@@ -235,15 +243,26 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                   {new Date(notif.timestamp).toLocaleString()}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.unreadBtn}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  markAsUnread(notif.uniqId);
-                }}
-              >
-                <Bell size={16} color="#1E88E5" />
-              </TouchableOpacity>
+              <View style={styles.notifActions}>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    markAsUnread(notif.uniqId);
+                  }}
+                >
+                  <Bell size={16} color="#1E88E5" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    deleteNotification(notif.uniqId);
+                  }}
+                >
+                  <X size={16} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </View>
@@ -294,7 +313,15 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                     {new Date(notif.timestamp).toLocaleString()}
                   </Text>
                 </View>
-                <ChevronRight size={16} color="#9CA3AF" />
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    deleteAuthorityNotification(notif.uniqId);
+                  }}
+                >
+                  <X size={16} color="#EF4444" />
+                </TouchableOpacity>
               </TouchableOpacity>
             ))}
           </View>
@@ -305,12 +332,14 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, darkMode && styles.textGray]}>Earlier</Text>
             {readAuthority.map((notif) => (
-              <TouchableOpacity
+              <View
                 key={notif.uniqId}
                 style={[styles.notifItem, darkMode && styles.notifItemDark]}
-                onPress={() => handleAuthorityNotificationClick(notif)}
               >
-                <View style={styles.notifContent}>
+                <TouchableOpacity
+                  style={styles.notifContent}
+                  onPress={() => handleAuthorityNotificationClick(notif)}
+                >
                   <View style={styles.notifHeader}>
                     <CheckCircle size={16} color="#10B981" />
                     <Text style={[styles.notifTitle, darkMode && styles.textWhite]} numberOfLines={1}>
@@ -323,17 +352,28 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                   <Text style={styles.notifTime}>
                     {new Date(notif.timestamp).toLocaleString()}
                   </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.markUnreadBtn}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    handleMarkAuthorityAsUnread(notif.uniqId);
-                  }}
-                >
-                  <Text style={styles.markUnreadText}>Mark as unread</Text>
                 </TouchableOpacity>
-              </TouchableOpacity>
+                <View style={styles.notifActions}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      handleMarkAuthorityAsUnread(notif.uniqId);
+                    }}
+                  >
+                    <Bell size={16} color="#1E88E5" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      deleteAuthorityNotification(notif.uniqId);
+                    }}
+                  >
+                    <X size={16} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             ))}
           </View>
         )}
@@ -380,7 +420,15 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                   {new Date(notif.timestamp).toLocaleString()}
                 </Text>
               </View>
-              <ChevronRight size={16} color="#9CA3AF" />
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  deleteAdminNotification(notif.uniqId);
+                }}
+              >
+                <X size={16} color="#EF4444" />
+              </TouchableOpacity>
             </TouchableOpacity>
           ))}
         </View>
@@ -411,15 +459,26 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                   {new Date(notif.timestamp).toLocaleString()}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.unreadBtn}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  markAdminAsUnread(notif.uniqId);
-                }}
-              >
-                <Bell size={16} color="#1E88E5" />
-              </TouchableOpacity>
+              <View style={styles.notifActions}>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    markAdminAsUnread(notif.uniqId);
+                  }}
+                >
+                  <Bell size={16} color="#1E88E5" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    deleteAdminNotification(notif.uniqId);
+                  }}
+                >
+                  <X size={16} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </View>
@@ -711,6 +770,27 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     borderRadius: 6,
     backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteBtn: {
+    padding: 8,
+    marginLeft: 8,
+    borderRadius: 6,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notifActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginLeft: 8,
+  },
+  actionBtn: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
   },
