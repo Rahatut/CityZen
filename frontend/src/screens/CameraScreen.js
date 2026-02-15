@@ -153,6 +153,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-around',
         paddingHorizontal: 20,
+        paddingBottom: 10
     },
     cameraButton: {
         backgroundColor: '#1E88E5',

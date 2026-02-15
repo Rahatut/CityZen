@@ -171,7 +171,7 @@ const StatCard = ({ icon: Icon, color, bg, value, label, darkMode, onPress }) =>
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  container: { flex: 1, backgroundColor: '#F9FAFB', paddingBottom: 10 },
   darkContainer: { backgroundColor: '#111827' },
   textWhite: { color: 'white' },
   welcome: { fontSize: 24, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },

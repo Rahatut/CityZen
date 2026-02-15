@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     borderTopWidth: 1,
     paddingVertical: 16,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 40,
     position: 'absolute',
     bottom: 0,
     left: 0,
