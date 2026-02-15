@@ -25,6 +25,8 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
   const [radiusFilter, setRadiusFilter] = useState(null); // in km
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [timeFilter, setTimeFilter] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all'); // all, resolved, pending, accepted, rejected
+  const [sortBy, setSortBy] = useState('relevant'); // newest, oldest, relevant
   const [activeFilterCount, setActiveFilterCount] = useState(0);
 
   // Report modal state
@@ -210,7 +212,45 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       if (timeFilter === 'month' && diffDays > 30) return false;
     }
 
+    // Status filter
+    if (statusFilter !== 'all') {
+      const status = complaint.currentStatus?.toLowerCase();
+      if (statusFilter === 'resolved' && status !== 'resolved' && status !== 'completed') return false;
+      if (statusFilter === 'pending' && status !== 'pending') return false;
+      if (statusFilter === 'accepted' && status !== 'accepted') return false;
+      if (statusFilter === 'rejected' && status !== 'rejected') return false;
+    }
+
     return matchesSearch;
+  });
+
+  // Sort complaints
+  const sortedComplaints = [...filteredComplaints].sort((a, b) => {
+    if (sortBy === 'newest') {
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    } else if (sortBy === 'oldest') {
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    } else if (sortBy === 'relevant') {
+      // Relevant: prioritize recent resolved/completed + upvotes
+      const now = new Date();
+      const twoWeeksAgo = new Date(now - 14 * 24 * 60 * 60 * 1000);
+      
+      const aDate = new Date(a.createdAt);
+      const bDate = new Date(b.createdAt);
+      const aStatus = a.status?.toLowerCase();
+      const bStatus = b.status?.toLowerCase();
+      
+      // Check if resolved/completed within last 2 weeks
+      const aRecentResolved = (aStatus === 'resolved' || aStatus === 'completed') && aDate >= twoWeeksAgo;
+      const bRecentResolved = (bStatus === 'resolved' || bStatus === 'completed') && bDate >= twoWeeksAgo;
+      
+      // Calculate relevance score: upvotes + bonus for recent resolved
+      const aScore = (a.upvotes || 0) + (aRecentResolved ? 100 : 0);
+      const bScore = (b.upvotes || 0) + (bRecentResolved ? 100 : 0);
+      
+      return bScore - aScore;
+    }
+    return 0;
   });
 
   const onRefresh = useCallback(() => {
@@ -318,7 +358,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
         )}
 
         {/* Empty State */}
-        {!loading && !error && filteredComplaints.length === 0 && (
+        {!loading && !error && sortedComplaints.length === 0 && (
           <View style={styles.centerContainer}>
             <Text style={[styles.emptyText, darkMode && styles.textWhite]}>
               {searchQuery ? 'No complaints found' : 'No complaints yet'}
@@ -327,7 +367,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
         )}
 
         {/* Complaints List */}
-        {!loading && !error && filteredComplaints.map((item) => (
+        {!loading && !error && sortedComplaints.map((item) => (
           <TouchableOpacity
             key={item.id}
             activeOpacity={0.9}
@@ -513,6 +553,62 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                   <Text style={[styles.filterChipText, timeFilter === 'month' && styles.filterChipTextActive]}>Last Month</Text>
                 </TouchableOpacity>
               </View>
+
+              <Text style={styles.filterSectionTitle}>Status</Text>
+              <View style={styles.filterOptionsGrid}>
+                <TouchableOpacity
+                  style={[styles.filterChip, statusFilter === 'all' && styles.filterChipActive]}
+                  onPress={() => setStatusFilter('all')}
+                >
+                  <Text style={[styles.filterChipText, statusFilter === 'all' && styles.filterChipTextActive]}>All</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterChip, statusFilter === 'resolved' && styles.filterChipActive]}
+                  onPress={() => setStatusFilter('resolved')}
+                >
+                  <Text style={[styles.filterChipText, statusFilter === 'resolved' && styles.filterChipTextActive]}>Resolved/Completed</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterChip, statusFilter === 'pending' && styles.filterChipActive]}
+                  onPress={() => setStatusFilter('pending')}
+                >
+                  <Text style={[styles.filterChipText, statusFilter === 'pending' && styles.filterChipTextActive]}>Pending</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterChip, statusFilter === 'accepted' && styles.filterChipActive]}
+                  onPress={() => setStatusFilter('accepted')}
+                >
+                  <Text style={[styles.filterChipText, statusFilter === 'accepted' && styles.filterChipTextActive]}>Accepted</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterChip, statusFilter === 'rejected' && styles.filterChipActive]}
+                  onPress={() => setStatusFilter('rejected')}
+                >
+                  <Text style={[styles.filterChipText, statusFilter === 'rejected' && styles.filterChipTextActive]}>Rejected</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.filterSectionTitle}>Sort By</Text>
+              <View style={styles.filterOptionsGrid}>
+                <TouchableOpacity
+                  style={[styles.filterChip, sortBy === 'relevant' && styles.filterChipActive]}
+                  onPress={() => setSortBy('relevant')}
+                >
+                  <Text style={[styles.filterChipText, sortBy === 'relevant' && styles.filterChipTextActive]}>Relevant</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterChip, sortBy === 'oldest' && styles.filterChipActive]}
+                  onPress={() => setSortBy('oldest')}
+                >
+                  <Text style={[styles.filterChipText, sortBy === 'oldest' && styles.filterChipTextActive]}>Oldest</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.filterChip, sortBy === 'newest' && styles.filterChipActive]}
+                  onPress={() => setSortBy('newest')}
+                >
+                  <Text style={[styles.filterChipText, sortBy === 'newest' && styles.filterChipTextActive]}>Newest</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
 
             <View style={styles.modalActionButtons}>
@@ -522,6 +618,8 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                   setRadiusFilter(null);
                   setCategoryFilter(null);
                   setTimeFilter(null);
+                  setStatusFilter('all');
+                  setSortBy('newest');
                   setActiveFilterCount(0);
                   setFilterModalVisible(false);
                 }}
@@ -535,6 +633,8 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                   if (radiusFilter) count++;
                   if (categoryFilter) count++;
                   if (timeFilter) count++;
+                  if (statusFilter !== 'all') count++;
+                  if (sortBy !== 'newest') count++;
                   setActiveFilterCount(count);
                   setFilterModalVisible(false);
                 }}
@@ -597,7 +697,7 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  container: { flex: 1, backgroundColor: '#F9FAFB', paddingBottom: 10 },
   darkContainer: { backgroundColor: '#111827' },
   heading: { fontSize: 24, fontWeight: 'bold', marginBottom: 16, color: '#1F2937' },
   textWhite: { color: 'white' },

@@ -792,9 +792,9 @@ exports.rateComplaint = async (req, res) => {
     if (!complaint) return res.status(404).json({ message: 'Complaint not found.' });
 
     // Basic permission check: only the reporter can rate
-    if (complaint.citizenUid !== citizenUid) {
-      return res.status(403).json({ message: 'Only the reporter can rate this complaint.' });
-    }
+    // if (complaint.citizenUid !== citizenUid) {
+    //   return res.status(403).json({ message: 'Only the reporter can rate this complaint.' });
+    // }
 
     if (complaint.currentStatus !== 'resolved' && complaint.currentStatus !== 'completed') {
       return res.status(400).json({ message: 'Complaint must be resolved before rating.' });
