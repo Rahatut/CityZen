@@ -6,17 +6,17 @@ import NotificationDropdown from './NotificationDropdown';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Navigation({ onLogout, darkMode, toggleDarkMode, navigation }) {
-  const { history } = useNotification();
+  const { history, logout } = useNotification();
   const { getTotalUnreadCount, isAdmin } = useAdminNotification();
   const { getAuthorityUnreadCount, isAuthority } = useAuthorityNotification();
   const [showDropdown, setShowDropdown] = useState(false);
   const [userRole, setUserRole] = useState('citizen');
-  
+
   // Log navigation prop
   useEffect(() => {
     console.log('Navigation component - navigation prop:', !!navigation, navigation);
   }, [navigation]);
-  
+
   // Determine user role
   useEffect(() => {
     const getUserRole = async () => {
@@ -35,10 +35,10 @@ export default function Navigation({ onLogout, darkMode, toggleDarkMode, navigat
 
   // Calculate unread count based on role
   const unreadCount = userRole === 'admin'
-    ? getTotalUnreadCount() 
+    ? getTotalUnreadCount()
     : userRole === 'authority'
-    ? (getAuthorityUnreadCount ? getAuthorityUnreadCount() : 0)
-    : (history ? history.filter(n => !n.read).length : 0);
+      ? (getAuthorityUnreadCount ? getAuthorityUnreadCount() : 0)
+      : (history ? history.filter(n => !n.read).length : 0);
 
   const handleNotificationPress = () => {
     setShowDropdown(!showDropdown);
@@ -71,8 +71,8 @@ export default function Navigation({ onLogout, darkMode, toggleDarkMode, navigat
 
           {/* Actions */}
           <View style={styles.actionsContainer}>
-            <TouchableOpacity 
-              style={styles.iconButton} 
+            <TouchableOpacity
+              style={styles.iconButton}
               onPress={handleNotificationPress}
             >
               <Bell size={24} color={darkMode ? '#D1D5DB' : '#374151'} />
@@ -87,13 +87,19 @@ export default function Navigation({ onLogout, darkMode, toggleDarkMode, navigat
               {darkMode ? <Sun size={24} color="#D1D5DB" /> : <Moon size={24} color="#374151" />}
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={onLogout} style={styles.iconButton}>
+            <TouchableOpacity
+              onPress={() => {
+                if (logout) logout();
+                if (onLogout) onLogout();
+              }}
+              style={styles.iconButton}
+            >
               <LogOut size={24} color={darkMode ? '#D1D5DB' : '#374151'} />
             </TouchableOpacity>
           </View>
         </View>
       </View>
-      
+
       {/* Unified Notification Dropdown */}
       <NotificationDropdown
         visible={showDropdown}

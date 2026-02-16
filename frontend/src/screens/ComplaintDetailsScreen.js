@@ -295,7 +295,7 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         ) : error ? (
           <View style={[styles.errorCard, darkMode && styles.errorCardDark]}>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); setError(null); setRetryTick((t) => t + 1); }}>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); setError(null); fetchComplaintData(); }}>
               <Text style={styles.retryText}>Retry</Text>
             </TouchableOpacity>
           </View>
@@ -306,12 +306,34 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
         <View style={styles.content}>
           <View style={[styles.card, darkMode && styles.cardDark]}>
             <Text style={[styles.title, darkMode && styles.textWhite]}>{complaint?.title || 'Untitled Complaint'}</Text>
-            <View style={[styles.badge, { backgroundColor: (complaint?.currentStatus === 'pending' ? '#FEE2E2' : '#FFEDD5'), alignSelf: 'flex-start', marginBottom: 16 }]}>
-              <Text style={{ color: (complaint?.currentStatus === 'pending' ? '#B91C1C' : '#C2410C'), fontWeight: 'bold' }}>
-                {(complaint?.currentStatus || 'pending').replace('_', ' ').replace(/^./, s => s.toUpperCase())}
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+              <View style={[styles.badge, { backgroundColor: (complaint?.currentStatus === 'pending' ? '#FEE2E2' : '#FFEDD5'), alignSelf: 'flex-start' }]}>
+                <Text style={{ color: (complaint?.currentStatus === 'pending' ? '#B91C1C' : '#C2410C'), fontWeight: 'bold' }}>
+                  {(complaint?.currentStatus || 'pending').replace('_', ' ').replace(/^./, s => s.toUpperCase())}
+                </Text>
+              </View>
+              {/* My Complaint Badge */}
+              {userData && complaint && (userData.firebaseUid === complaint.citizenUid || userData.uid === complaint.citizenUid || userData.id === complaint.citizenUid) && (
+                <View style={[styles.badge, { backgroundColor: '#DBEAFE', marginLeft: 8, alignSelf: 'flex-start' }]}>
+                  <Text style={{ color: '#1E40AF', fontWeight: 'bold', fontSize: 12 }}>My Complaint</Text>
+                </View>
+              )}
             </View>
             <Text style={[styles.description, darkMode && styles.textGray]}>{complaint?.description || 'No description provided.'}</Text>
+
+            {/* Authority Department Info */}
+            {complaint?.AuthorityCompany && (
+              <View style={styles.authorityInfoCard}>
+                <View style={styles.authorityInfoHeader}>
+                  <MapPin size={16} color="#1E88E5" />
+                  <Text style={styles.authorityInfoLabel}>Assigned to Department</Text>
+                </View>
+                <Text style={styles.authorityInfoName}>{complaint.AuthorityCompany.name}</Text>
+                {complaint.AuthorityCompany.description && (
+                  <Text style={styles.authorityInfoContact}>{complaint.AuthorityCompany.description}</Text>
+                )}
+              </View>
+            )}
 
             {/* Bump Button - Prominent Placement */}
             {canBumpComplaint() && (
@@ -626,6 +648,40 @@ const styles = StyleSheet.create({
   stepContainer: { alignItems: 'center', flex: 1 },
   stepText: { fontSize: 10, color: '#9CA3AF', marginTop: 4 },
   stepTextActive: { color: '#16A34A', fontWeight: 'bold' },
+  authorityInfoCard: {
+    backgroundColor: '#EFF6FF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#1E88E5',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    marginBottom: 8
+  },
+  authorityInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6
+  },
+  authorityInfoLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginLeft: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
+  },
+  authorityInfoName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E88E5',
+    marginLeft: 22
+  },
+  authorityInfoContact: {
+    fontSize: 13,
+    color: '#374151',
+    marginLeft: 22,
+    marginTop: 4
+  },
   loaderWrap: { height: 250, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 8, color: '#6B7280' },
   errorCard: { margin: 16, padding: 16, borderRadius: 12, backgroundColor: '#FEE2E2', borderWidth: 1, borderColor: '#FECACA' },

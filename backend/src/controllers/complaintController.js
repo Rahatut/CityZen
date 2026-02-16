@@ -809,7 +809,7 @@ exports.getComplaintById = async (req, res) => {
         model: ComplaintImages,
         as: 'images',
         attributes: ['id', 'imageURL', 'type'],
-      },
+      }
     ];
 
     if (citizenUid) {
@@ -835,6 +835,19 @@ exports.getComplaintById = async (req, res) => {
       delete plainComplaint.Upvotes;
     } else {
       plainComplaint.hasUpvoted = false;
+    }
+
+    // Fetch authority assignment separately
+    const assignment = await ComplaintAssignment.findOne({
+      where: { complaintId: id },
+      include: [{
+        model: sequelize.models.AuthorityCompany,
+        attributes: ['id', 'name', 'description']
+      }]
+    });
+
+    if (assignment) {
+      plainComplaint.AuthorityCompany = assignment.AuthorityCompany;
     }
 
     // Sign image URLs to ensure accessibility

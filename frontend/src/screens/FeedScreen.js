@@ -234,20 +234,20 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       // Relevant: prioritize recent resolved/completed + upvotes
       const now = new Date();
       const twoWeeksAgo = new Date(now - 14 * 24 * 60 * 60 * 1000);
-      
+
       const aDate = new Date(a.createdAt);
       const bDate = new Date(b.createdAt);
       const aStatus = a.status?.toLowerCase();
       const bStatus = b.status?.toLowerCase();
-      
+
       // Check if resolved/completed within last 2 weeks
       const aRecentResolved = (aStatus === 'resolved' || aStatus === 'completed') && aDate >= twoWeeksAgo;
       const bRecentResolved = (bStatus === 'resolved' || bStatus === 'completed') && bDate >= twoWeeksAgo;
-      
+
       // Calculate relevance score: upvotes + bonus for recent resolved
       const aScore = (a.upvotes || 0) + (aRecentResolved ? 100 : 0);
       const bScore = (b.upvotes || 0) + (bRecentResolved ? 100 : 0);
-      
+
       return bScore - aScore;
     }
     return 0;
@@ -381,6 +381,12 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
                   <MapPin size={10} color={darkMode ? '#9CA3AF' : '#6B7280'} />
                 </View>
                 <Text style={[styles.categoryText, darkMode && styles.textGray]}>{item.Category?.name || 'Uncategorized'}</Text>
+                {/* My Complaint Badge */}
+                {userData && (userData.firebaseUid === item.citizenUid || userData.uid === item.citizenUid || userData.id === item.citizenUid) && (
+                  <View style={styles.myComplaintBadge}>
+                    <Text style={styles.myComplaintText}>My Complaint</Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
             </View>
@@ -873,5 +879,17 @@ const styles = StyleSheet.create({
   cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, borderWidth: 1, borderColor: '#D1D5DB' },
   cancelText: { color: '#374151', fontWeight: '600' },
   submitBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, backgroundColor: '#F59E0B' },
-  submitText: { color: 'white', fontWeight: '700' }
+  submitText: { color: 'white', fontWeight: '700' },
+  myComplaintBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginLeft: 8
+  },
+  myComplaintText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#1E40AF'
+  }
 });
