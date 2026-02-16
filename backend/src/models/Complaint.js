@@ -64,6 +64,18 @@ const Complaint = sequelize.define('Complaint', {
   adminRemarks: {
     type: DataTypes.TEXT,
     allowNull: true
+  },
+  lastBumpedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  priorityScore: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  lastAuthorityActivityAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 });
 

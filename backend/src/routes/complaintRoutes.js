@@ -61,6 +61,9 @@ router.post('/complaints/:id/appeal', upload.array('images'), complaintControlle
 // Upvote complaint
 router.post('/complaints/:id/upvote', complaintController.upvoteComplaint);
 
+// Bump complaint
+router.post('/complaints/:id/bump', complaintController.bumpComplaint);
+
 // Report complaint
 router.post('/complaints/:id/report', complaintController.reportComplaint);
 

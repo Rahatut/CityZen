@@ -75,13 +75,13 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     const activeDetections = React.useRef(0);
 
     const generationKey = aiResult && location
-    ? JSON.stringify({
-        label: aiResult.label,
-        confidence: Math.floor(aiResult.confidence), // avoid tiny float changes
-        lat: Number(location.latitude?.toFixed(5)),
-        lng: Number(location.longitude?.toFixed(5)),
+        ? JSON.stringify({
+            label: aiResult.label,
+            confidence: Math.floor(aiResult.confidence), // avoid tiny float changes
+            lat: Number(location.latitude?.toFixed(5)),
+            lng: Number(location.longitude?.toFixed(5)),
         })
-    : null;
+        : null;
 
 
     useEffect(() => {
@@ -147,10 +147,10 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
     }, []);
 
     useEffect(() => {
-      if (images.length === 0) {
-        setAiResult(null);
-        lastGenerationKeyRef.current = null;
-        return;
+        if (images.length === 0) {
+            setAiResult(null);
+            lastGenerationKeyRef.current = null;
+            return;
         }
     }, [images]);
 
@@ -160,42 +160,42 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         if (aiResult.confidence < CONFIDENCE_THRESHOLD) return;
         if (!location?.latitude || !location?.longitude) return;
         if (!generationKey) return;
-      
+
         // Prevent unnecessary regeneration
         if (lastGenerationKeyRef.current === generationKey) {
-          return;
+            return;
         }
-      
+
         // Mark this input set as processed
         lastGenerationKeyRef.current = generationKey;
-      
+
         const generateComplaintText = async () => {
-          try {
-            const response = await axios.post(
-              `${OPENROUTER_API_URL}/generate_complaint_text`,
-              {
-                category: aiResult.label,
-                confidence: aiResult.confidence,
-                latitude: location.latitude,
-                longitude: location.longitude,
-                location_string: location.fullAddress,
-              }
-            );
-      
-            if (response.data.title) setTitle(response.data.title);
-            if (response.data.description) setDescription(response.data.description);
-          } catch (error) {
-            console.error("Error generating complaint text:", error);
-            Alert.alert(
-              "Generation Failed",
-              "Could not generate complaint details. Please try again."
-            );
-          }
+            try {
+                const response = await axios.post(
+                    `${OPENROUTER_API_URL}/generate_complaint_text`,
+                    {
+                        category: aiResult.label,
+                        confidence: aiResult.confidence,
+                        latitude: location.latitude,
+                        longitude: location.longitude,
+                        location_string: location.fullAddress,
+                    }
+                );
+
+                if (response.data.title) setTitle(response.data.title);
+                if (response.data.description) setDescription(response.data.description);
+            } catch (error) {
+                console.error("Error generating complaint text:", error);
+                Alert.alert(
+                    "Generation Failed",
+                    "Could not generate complaint details. Please try again."
+                );
+            }
         };
-      
+
         generateComplaintText();
-      }, [generationKey]);
-      
+    }, [generationKey]);
+
 
     const hasDuplicateAlertBeenShown = useRef(false);
 
