@@ -3,6 +3,26 @@ const { sequelize, Complaint } = require('../src/models');
 async function setComplaintStale(complaintId) {
     try {
         await sequelize.authenticate();
+
+        if (!complaintId) {
+            console.log("No ID provided. Listing last 10 complaints:");
+            const complaints = await Complaint.findAll({
+                limit: 10,
+                order: [['createdAt', 'DESC']],
+                attributes: ['id', 'title', 'currentStatus', 'createdAt']
+            });
+
+            console.table(complaints.map(c => ({
+                ID: c.id,
+                Title: c.title,
+                Status: c.currentStatus,
+                Created: c.createdAt.toISOString().split('T')[0]
+            })));
+
+            console.log("\nUsage: node scripts/set-complaint-stale.js <ID>");
+            process.exit(0);
+        }
+
         console.log(`Looking for complaint ID: ${complaintId}`);
         const complaint = await Complaint.findByPk(complaintId);
 
@@ -36,9 +56,4 @@ async function setComplaintStale(complaintId) {
 }
 
 const id = process.argv[2];
-if (!id) {
-    console.log("Usage: node scripts/set-complaint-stale.js <complaintId>");
-    process.exit(1);
-}
-
 setComplaintStale(id);
