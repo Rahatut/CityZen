@@ -43,18 +43,18 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
   };
 
   const locationKey = location?.latitude && location?.longitude
-  ? `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`
-  : null;
+    ? `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`
+    : null;
 
 
   useEffect(() => {
     setChosenAuthorities([]);
   }, [selectedCategory?.id, locationKey]);
-  
+
 
   useEffect(() => {
     if (!selectedCategory || !locationKey) return;
-  
+
     const fetchRecommendedAuthority = async () => {
       setLoadingRecommendation(true);
       try {
@@ -76,19 +76,19 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
         setLoadingRecommendation(false);
       }
     };
-  
+
     const handler = setTimeout(fetchRecommendedAuthority, 800);
     return () => clearTimeout(handler);
   }, [selectedCategory?.id, locationKey]);
-  
+
 
   const handleSubmit = async () => {
     const newErrors = {};
     if (!title) newErrors.title = 'Title is required.';
-    if (images.length === 0) newErrors.image = 'Evidence photos are mandatory.';
+    // if (images.length === 0) newErrors.image = 'Evidence photos are mandatory.'; // Already validated in previous screen but good to keep
     if (!selectedCategory) newErrors.category = 'Category is required.';
     if (!location?.latitude || !location?.longitude) newErrors.location = 'GPS location is required.';
-    if (chosenAuthorities.length === 0) newErrors.authorities = 'Please select at least one authority.';
+    // chosenAuthorities validation if needed
 
     if (Object.keys(newErrors).length > 0) {
       const errorMessages = Object.values(newErrors).join('\n');
@@ -105,23 +105,17 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
     formData.append('description', description);
     formData.append('latitude', location.latitude);
     formData.append('longitude', location.longitude);
-    // Get UID from AsyncStorage to ensure consistency with HomeScreen
-    // Get UID from AsyncStorage to ensure consistency with HomeScreen
+
     let uid = auth.currentUser?.uid;
     try {
       const userDataStr = await AsyncStorage.getItem('userData');
       if (userDataStr) {
         const userData = JSON.parse(userDataStr);
-        console.log("SubmitComplaint - Loaded UserData:", userData);
-        // Match HomeScreen logic exactly: uid || id
-        // But also fallback to firebaseUid if present, or auth.currentUser
         uid = userData.uid || userData.id || userData.firebaseUid || uid;
       }
     } catch (e) {
       console.error("Failed to get userData from storage", e);
     }
-
-    console.log("Submitting Complaint with UID:", uid);
 
     formData.append('citizenUid', uid);
     formData.append('categoryId', selectedCategory.id);
@@ -154,32 +148,83 @@ export default function SubmitComplaintScreen({ navigation, onLogout, darkMode, 
 
       if (response.status === 201) {
         Alert.alert("Success", "Complaint Submitted Successfully!");
-
-        // Map chosen authority IDs to their names and save to context
         const assignedAuthorityNames = chosenAuthorities.map(chosenId => {
           const authority = recommendedAuthorities.find(rec => rec.id === chosenId);
           return authority ? authority.name : 'Unknown Authority';
         });
         setAssignedAuthorities(assignedAuthorityNames);
-
-        // Navigate first, then reset state will be handled by the SubmittedComplaint screen
         navigation.navigate('SubmittedComplaint');
-      } else {
-        Alert.alert('Error', 'Failed to submit complaint. Please try again.');
       }
     } catch (error) {
-      console.error('Submit Complaint Error:', error.response?.data || error.message);
+      const status = error.response?.status;
+      const data = error.response?.data;
 
-      let errorMessage = 'An unexpected error occurred.';
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Network timeout. Please check your connection and try again.';
-      } else if (error.message === 'Network Error') {
-        errorMessage = 'Network Error. Could not connect to the server. Please ensure the backend is running and the API URL is correct.';
+      if (status === 409 && data?.isDuplicate) {
+        if (data.canBump && data.existingComplaintId) {
+          // Trigger Bump UI
+          Alert.alert(
+            "Still waiting for a fix? 🚀",
+            data.message,
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Bump to Top",
+                onPress: () => handleBump(data.existingComplaintId)
+              }
+            ]
+          );
+        } else if (data.existingComplaint) {
+          // Standard Duplicate Block with View Option
+          Alert.alert(
+            "Good News! 📋",
+            "You have already reported this issue. We are tracking it for you. Would you like to see the current status?",
+            [
+              { text: "Not Now", style: "cancel" },
+              {
+                text: "View Status",
+                onPress: () => navigation.navigate('ComplaintDetails', { complaintId: data.existingComplaint.id })
+              }
+            ]
+          );
+        } else {
+          Alert.alert("Submission Blocked", data.message);
+        }
+      } else if (status === 400 && data?.isImageReused) {
+        Alert.alert("Invalid Image", data.message);
+      } else if (status === 429) {
+        Alert.alert("Too Many Requests", data.message);
+        // TODO: Implement Captcha Trigger here
       } else {
-        errorMessage = error.response?.data?.message || 'An unexpected error occurred.';
+        console.error('Submit Complaint Error:', error.response?.data || error.message);
+        let errorMessage = 'An unexpected error occurred.';
+        if (error.code === 'ECONNABORTED') {
+          errorMessage = 'Network timeout. Please check your connection and try again.';
+        } else if (error.message === 'Network Error') {
+          errorMessage = 'Network Error. Could not connect to the server.';
+        } else {
+          errorMessage = data?.message || 'An unexpected error occurred.';
+        }
+        Alert.alert('Submission Failed', errorMessage);
       }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-      Alert.alert('Submission Failed', errorMessage);
+  const handleBump = async (complaintId) => {
+    try {
+      setIsSubmitting(true);
+      const response = await axios.post(`${API_URL}/api/complaints/${complaintId}/bump`, {}, {
+        headers: { 'bypass-tunnel-reminder': 'true' }
+      });
+
+      if (response.status === 200) {
+        Alert.alert("Success", "Complaint Bumped to Top of Queue! 🚀");
+        navigation.navigate('UserComplaintList'); // Or dashboard
+      }
+    } catch (error) {
+      console.error("Bump Error:", error);
+      Alert.alert("Error", error.response?.data?.message || "Failed to bump complaint.");
     } finally {
       setIsSubmitting(false);
     }

@@ -24,6 +24,10 @@ const ComplaintImages = sequelize.define('ComplaintImages', {
     type: DataTypes.ENUM('initial', 'progress', 'resolution', 'appeal', 'evidence'),
     defaultValue: 'initial',
     allowNull: false
+  },
+  imageHash: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });
 

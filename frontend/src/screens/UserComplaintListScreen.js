@@ -57,12 +57,17 @@ export default function UserComplaintListScreen({ navigation, route, darkMode, t
         fetchComplaints();
     };
 
-    const StatusBadge = ({ status }) => {
+    const StatusBadge = ({ status, lastBumpedAt }) => {
         const isResolved = ['resolved', 'closed', 'completed'].includes(status);
         const isPending = status === 'pending';
         const isInProgress = ['in_progress', 'accepted'].includes(status);
         const isAppealed = status === 'appealed';
         const isRejected = status === 'rejected';
+
+        // Check if bumped recently (e.g., in the last 3 days) or just if bumped ever? 
+        // Requirement: "Add a 'Bumped' badge... so they know it’s active."
+        // Let's show it if lastBumpedAt is not null.
+        const isBumped = !!lastBumpedAt;
 
         let bg = '#F3F4F6';
         let color = '#374151';
@@ -75,8 +80,15 @@ export default function UserComplaintListScreen({ navigation, route, darkMode, t
         else if (isRejected) { bg = '#FEE2E2'; color = '#991B1B'; }
 
         return (
-            <View style={[styles.badge, { backgroundColor: bg }]}>
-                <Text style={[styles.badgeText, { color }]}>{text}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {isBumped && (
+                    <View style={[styles.badge, { backgroundColor: '#F0F9FF' }]}>
+                        <Text style={[styles.badgeText, { color: '#0284C7' }]}>BUMPED 🚀</Text>
+                    </View>
+                )}
+                <View style={[styles.badge, { backgroundColor: bg }]}>
+                    <Text style={[styles.badgeText, { color }]}>{text}</Text>
+                </View>
             </View>
         );
     };
@@ -148,13 +160,13 @@ export default function UserComplaintListScreen({ navigation, route, darkMode, t
                                     </View>
                                     <View style={styles.cardContent}>
                                         <Text style={[styles.cardTitle, darkMode && styles.textWhite]} numberOfLines={2}>
-                                            {item.title}
+                                            #{item.id} {item.title}
                                         </Text>
                                         <Text style={[styles.cardDesc, darkMode && styles.textGray]} numberOfLines={2}>
                                             {item.description || 'No description provided'}
                                         </Text>
                                     </View>
-                                    <StatusBadge status={item.currentStatus} />
+                                    <StatusBadge status={item.currentStatus} lastBumpedAt={item.lastBumpedAt} />
                                 </View>
 
                                 <View style={[styles.cardFooter, darkMode && styles.cardFooterDark]}>
