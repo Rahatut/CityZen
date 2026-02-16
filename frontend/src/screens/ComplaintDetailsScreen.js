@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Modal, TextInput as RNTextInput, KeyboardAvoidingView, Platform, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect } from '@react-navigation/native';
@@ -31,6 +31,10 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
   const [appealReason, setAppealReason] = useState('');
   const [appealImages, setAppealImages] = useState([]);
   const [appealSubmitting, setAppealSubmitting] = useState(false);
+
+  // Double-tap for upvote
+  const [lastImageTap, setLastImageTap] = useState(0);
+  const heartAnimScale = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -278,6 +282,33 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
     return true;
   };
 
+  // Handle double-tap on image to upvote
+  const handleImageDoubleTap = async () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    if (now - lastImageTap < DOUBLE_TAP_DELAY) {
+      // Double tap detected - upvote
+      try {
+        if (!userData || !userData.firebaseUid) {
+          Alert.alert('Error', 'Please login to upvote');
+          return;
+        }
+        await api.post(`/complaints/${complaintIdToFetch}/upvote`, { citizenUid: userData.firebaseUid });
+        // Show heart animation
+        Animated.sequence([
+          Animated.spring(heartAnimScale, { toValue: 1, useNativeDriver: true, friction: 3 }),
+          Animated.delay(400),
+          Animated.timing(heartAnimScale, { toValue: 0, duration: 200, useNativeDriver: true })
+        ]).start();
+        // Refresh complaint to update upvote count
+        fetchComplaintData();
+      } catch (e) {
+        console.error('Upvote failed', e);
+      }
+    }
+    setLastImageTap(now);
+  };
+
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
@@ -300,7 +331,13 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
             </TouchableOpacity>
           </View>
         ) : (
-          <Image source={{ uri: (complaint?.images?.[0]?.imageURL) || 'https://via.placeholder.com/1200x800?text=No+Image' }} style={styles.image} resizeMode="cover" />
+          <TouchableOpacity activeOpacity={1} onPress={handleImageDoubleTap} style={{ position: 'relative' }}>
+            <Image source={{ uri: (complaint?.images?.[0]?.imageURL) || 'https://via.placeholder.com/1200x800?text=No+Image' }} style={styles.image} resizeMode="cover" />
+            {/* Double Tap Heart Animation */}
+            <Animated.View style={[styles.heartAnimation, { transform: [{ scale: heartAnimScale }] }]}>
+              <Heart size={100} color="white" fill="white" />
+            </Animated.View>
+          </TouchableOpacity>
         )}
 
         <View style={styles.content}>
