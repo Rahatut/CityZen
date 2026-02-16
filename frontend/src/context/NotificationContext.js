@@ -196,6 +196,56 @@ export const NotificationProvider = ({ children }) => {
         }
     };
 
+    // Logout function to clear all state and storage
+    const logout = async () => {
+        try {
+            console.log('NotificationProvider: Logging out...');
+
+            // 1. Clear Context State
+            setNotification(null);
+            setAdminNotification(null);
+            setAuthorityNotification(null);
+
+            setHistory([]);
+            setAdminHistory([]);
+            setAuthorityHistory([]);
+
+            setLastStatuses({});
+            lastStatusesRef.current = {};
+
+            setLastCounts({ reports: 0, appeals: 0 });
+            lastCountsRef.current = { reports: 0, appeals: 0 };
+
+            setLastAssignmentCount(0);
+            lastAssignmentCountRef.current = 0;
+
+            setCurrentUid(null);
+            setUserRole(null); // Setting to null stops all polling effects
+            setIsAdmin(false);
+            setIsAuthority(false);
+            setAuthorityCompanyId(null);
+
+            // 2. Clear relevant AsyncStorage keys
+            const keysToRemove = [
+                'userData',
+                'userToken',
+                'authorityCompanyId',
+                // We might want to keep history for next login if we want persistence, 
+                // but for security/privacy on shared devices, clearing or relying on user-specific keys is better.
+                // Our load functions use UID-specific keys, so we don't strictly need to delete *those* keys,
+                // just the keys that identify the CURRENT user.
+                'adminLastCounts', // Admin counts can be reset
+                'authorityLastAssignmentCount'
+            ];
+
+            await AsyncStorage.multiRemove(keysToRemove);
+            console.log('NotificationProvider: Logout complete, state and core storage cleared.');
+
+        } catch (e) {
+            console.error('NotificationProvider: Logout failed', e);
+        }
+    };
+
     // Use a function that can be called to refresh user state from storage
     const refreshUser = async () => {
         try {
@@ -1003,7 +1053,7 @@ export const NotificationProvider = ({ children }) => {
     };
 
     return (
-        <NotificationContext.Provider value={{ setNavigation, history, notification, markAsRead, markAsUnread, markAllAsRead, deleteNotification }}>
+        <NotificationContext.Provider value={{ setNavigation, history, notification, markAsRead, markAsUnread, markAllAsRead, deleteNotification, logout, userRole }}>
             <AdminNotificationContext.Provider value={{
                 setNavigation,
                 adminHistory,
@@ -1112,13 +1162,14 @@ const styles = StyleSheet.create({
         zIndex: 9999,
         borderLeftWidth: 4,
         borderLeftColor: '#1E88E5',
-        padding: 4 // inner padding handled by children
+        overflow: 'hidden'
     },
     content: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         padding: 12,
+        paddingRight: 8
     },
     iconBox: {
         backgroundColor: '#1E88E5',
@@ -1141,7 +1192,8 @@ const styles = StyleSheet.create({
     },
     closeBtn: {
         padding: 12,
-        borderLeftWidth: 1,
-        borderLeftColor: '#F3F4F6'
+        paddingLeft: 8,
+        justifyContent: 'center',
+        alignItems: 'center'
     }
 });

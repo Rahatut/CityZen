@@ -100,6 +100,9 @@ AuthorityCompany.belongsToMany(Complaint, {
 AuthorityCompany.hasMany(AuthorityCompanyAreas, { foreignKey: 'authorityCompanyId' });
 AuthorityCompanyAreas.belongsTo(AuthorityCompany, { foreignKey: 'authorityCompanyId' });
 
+// ComplaintAssignment to AuthorityCompany (for eager loading)
+ComplaintAssignment.belongsTo(AuthorityCompany, { foreignKey: 'authorityCompanyId' });
+
 // Upvote Associations
 Complaint.hasMany(Upvote, { foreignKey: 'complaintId' });
 Upvote.belongsTo(Complaint, { foreignKey: 'complaintId' });

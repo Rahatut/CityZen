@@ -99,7 +99,7 @@ export default function App() {
               {(props) => <SignupScreen {...props} onSignup={() => props.navigation.replace('HomeScreen')} />}
             </Stack.Screen>
             <Stack.Screen name="HomeScreen">{(props) => <HomeScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
-            <Stack.Screen name="Feed">{(props) => <FeedScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
+            <Stack.Screen name="Feed">{(props) => <FeedScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen
               name="Camera"
               options={{ animation: 'slide_from_bottom' }}
@@ -113,10 +113,10 @@ export default function App() {
             <Stack.Screen name="SimilarComplaints">{(props) => <SimilarComplaintsScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
             <Stack.Screen name="Notifications">{(props) => <NotificationsScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="Profile">{(props) => <ProfileScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
-            <Stack.Screen name="ComplaintDetails">{(props) => <ComplaintDetailsScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
+            <Stack.Screen name="ComplaintDetails">{(props) => <ComplaintDetailsScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="AuthorityDashboard">{(props) => <AuthorityDashboardScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
-            <Stack.Screen name="AuthorityComplaintList">{(props) => <AuthorityComplaintListScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
-            <Stack.Screen name="AuthorityComplaintDetail">{(props) => <AuthorityComplaintDetailScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}</Stack.Screen>
+            <Stack.Screen name="AuthorityComplaintList">{(props) => <AuthorityComplaintListScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
+            <Stack.Screen name="AuthorityComplaintDetail">{(props) => <AuthorityComplaintDetailScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="AdminDashboard">{(props) => <AdminDashboardScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="AdminComplaintDetail">{(props) => <AdminComplaintDetailScreen {...props} darkMode={darkMode} toggleDarkMode={toggleDarkMode} onLogout={() => props.navigation.reset({ index: 1, routes: [{ name: 'Landing' }, { name: 'Login' }] })} />}</Stack.Screen>
             <Stack.Screen name="AddEvidence">{(props) => <AddEvidenceScreen {...props} />}</Stack.Screen>

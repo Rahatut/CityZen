@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, Image, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, Alert, Modal, TextInput as RNTextInput } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, Image, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, Alert, Modal, TextInput as RNTextInput, Animated } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import Navigation from '../components/Navigation';
@@ -9,6 +9,151 @@ import axios from 'axios';
 import api from '../services/api';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+const ComplaintCard = ({ item, navigation, userData, darkMode, setComplaints, openReport }) => {
+  const lastTapRef = useRef(0);
+  const heartScaleRef = useRef(new Animated.Value(0)).current;
+
+  const displayImage = item.images?.find(img => img.type === 'initial') || item.images?.[0];
+
+  const handleDoubleTap = async () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+
+    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      // Double tap detected - upvote
+      try {
+        if (!userData || !userData.firebaseUid) return;
+
+        // Show heart animation
+        Animated.sequence([
+          Animated.spring(heartScaleRef, { toValue: 1, useNativeDriver: true, friction: 3 }),
+          Animated.delay(400),
+          Animated.timing(heartScaleRef, { toValue: 0, duration: 200, useNativeDriver: true })
+        ]).start();
+
+        const res = await api.post(`/complaints/${item.id}/upvote`, { citizenUid: userData.firebaseUid });
+        if (res.data && res.data.upvotes !== undefined) {
+          setComplaints(prev => prev.map(c => c.id === item.id ? { ...c, upvotes: res.data.upvotes, hasUpvoted: true } : c));
+        }
+      } catch (e) {
+        if (e.response && e.response.status === 400) {
+          // Already upvoted
+        } else {
+          console.error('Upvote failed', e);
+        }
+      }
+    }
+    lastTapRef.current = now;
+  };
+
+  return (
+    <TouchableOpacity
+      activeOpacity={0.9}
+      style={[styles.card, darkMode && styles.cardDark]}
+      onPress={() => navigation.navigate('ComplaintDetails', { id: item.id })}
+    >
+      {/* Header Row: Category & Date */}
+      <View style={styles.cardHeader}>
+        <View style={styles.categoryBadgeContainer}>
+          <View style={[styles.categoryIconCircle, { backgroundColor: darkMode ? '#374151' : '#F3F4F6' }]}>
+            <MapPin size={10} color={darkMode ? '#9CA3AF' : '#6B7280'} />
+          </View>
+          <Text style={[styles.categoryText, darkMode && styles.textGray]}>{item.Category?.name || 'Uncategorized'}</Text>
+          {userData && (userData.firebaseUid === item.citizenUid || userData.uid === item.citizenUid || userData.id === item.citizenUid) && (
+            <View style={styles.myComplaintBadge}>
+              <Text style={styles.myComplaintText}>My Complaint</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+      </View>
+
+      {/* Image Section */}
+      {displayImage ? (
+        <TouchableOpacity activeOpacity={1} onPress={handleDoubleTap} style={styles.imageWrapper}>
+          <Image source={{ uri: displayImage.imageURL }} style={styles.cardImage} />
+          <View style={[styles.statusOverlay, {
+            backgroundColor:
+              item.currentStatus === 'resolved' || item.currentStatus === 'completed' ? '#059669EE' :
+                item.currentStatus === 'rejected' ? '#DC2626EE' :
+                  item.currentStatus === 'in_progress' ? '#1E88E5EE' :
+                    item.currentStatus === 'accepted' ? '#F59E0BEE' : '#6B7280EE'
+          }]}>
+            <Text style={styles.statusOverlayText}>
+              {(item.currentStatus || 'pending').replace('_', ' ').toUpperCase()}
+            </Text>
+          </View>
+          {/* Double Tap Heart Animation */}
+          <Animated.View style={[styles.heartAnimation, { transform: [{ scale: heartScaleRef }] }]}>
+            <Heart size={80} color="white" fill="white" />
+          </Animated.View>
+        </TouchableOpacity>
+      ) : null}
+
+      <View style={styles.cardInfo}>
+        <Text style={[styles.cardTitle, darkMode && styles.textWhite]} numberOfLines={1}>{item.title}</Text>
+        <Text style={[styles.cardDescription, darkMode && styles.textGray]} numberOfLines={2}>
+          {item.description || 'No description provided.'}
+        </Text>
+
+        {/* Action Bar */}
+        <View style={[styles.cardActions, darkMode && styles.cardActionsDark]}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={async () => {
+              try {
+                if (!userData || !userData.firebaseUid) {
+                  Alert.alert('Error', 'Please login to upvote');
+                  return;
+                }
+                const res = await api.post(`/complaints/${item.id}/upvote`, { citizenUid: userData.firebaseUid });
+                if (res.data && res.data.upvotes !== undefined) {
+                  setComplaints(prev => prev.map(c => c.id === item.id ? { ...c, upvotes: res.data.upvotes, hasUpvoted: true } : c));
+                }
+              } catch (e) {
+                if (e.response && e.response.status === 400) {
+                  Alert.alert('Info', 'You have already upvoted this complaint.');
+                } else {
+                  console.error('Upvote failed', e);
+                }
+              }
+            }}
+          >
+            <Heart
+              size={18}
+              color={item.hasUpvoted ? "#EF4444" : "#9CA3AF"}
+              fill={item.hasUpvoted ? "#EF4444" : "transparent"}
+            />
+            <Text style={[styles.actionBtnLabel, item.hasUpvoted && { color: "#EF4444" }]}>
+              {item.upvotes || 0}
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.vSeparator} />
+
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => navigation.navigate('AddEvidence', { complaintId: item.id })}
+          >
+            <Camera size={18} color="#6B7280" />
+            <Text style={styles.actionBtnLabel}>Evidence</Text>
+          </TouchableOpacity>
+
+          <View style={styles.vSeparator} />
+
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => openReport(item)}
+          >
+            <AlertCircle size={18} color="#6B7280" />
+            <Text style={styles.actionBtnLabel}>Report</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
   const [complaints, setComplaints] = useState([]);
@@ -234,20 +379,20 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       // Relevant: prioritize recent resolved/completed + upvotes
       const now = new Date();
       const twoWeeksAgo = new Date(now - 14 * 24 * 60 * 60 * 1000);
-      
+
       const aDate = new Date(a.createdAt);
       const bDate = new Date(b.createdAt);
       const aStatus = a.status?.toLowerCase();
       const bStatus = b.status?.toLowerCase();
-      
+
       // Check if resolved/completed within last 2 weeks
       const aRecentResolved = (aStatus === 'resolved' || aStatus === 'completed') && aDate >= twoWeeksAgo;
       const bRecentResolved = (bStatus === 'resolved' || bStatus === 'completed') && bDate >= twoWeeksAgo;
-      
+
       // Calculate relevance score: upvotes + bonus for recent resolved
       const aScore = (a.upvotes || 0) + (aRecentResolved ? 100 : 0);
       const bScore = (b.upvotes || 0) + (bRecentResolved ? 100 : 0);
-      
+
       return bScore - aScore;
     }
     return 0;
@@ -366,107 +511,16 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
           </View>
         )}
 
-        {/* Complaints List */}
         {!loading && !error && sortedComplaints.map((item) => (
-          <TouchableOpacity
+          <ComplaintCard
             key={item.id}
-            activeOpacity={0.9}
-            style={[styles.card, darkMode && styles.cardDark]}
-            onPress={() => navigation.navigate('ComplaintDetails', { id: item.id })}
-          >
-            {/* Header Row: Category & Date */}
-            <View style={styles.cardHeader}>
-              <View style={styles.categoryBadgeContainer}>
-                <View style={[styles.categoryIconCircle, { backgroundColor: darkMode ? '#374151' : '#F3F4F6' }]}>
-                  <MapPin size={10} color={darkMode ? '#9CA3AF' : '#6B7280'} />
-                </View>
-                <Text style={[styles.categoryText, darkMode && styles.textGray]}>{item.Category?.name || 'Uncategorized'}</Text>
-              </View>
-              <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-            </View>
-
-            {/* Image Section */}
-            {(() => {
-              const displayImage = item.images?.find(img => img.type === 'initial') || item.images?.[0];
-              return displayImage ? (
-                <View style={styles.imageWrapper}>
-                  <Image source={{ uri: displayImage.imageURL }} style={styles.cardImage} />
-                  <View style={[styles.statusOverlay, {
-                    backgroundColor:
-                      item.currentStatus === 'resolved' || item.currentStatus === 'completed' ? '#059669EE' :
-                        item.currentStatus === 'rejected' ? '#DC2626EE' :
-                          item.currentStatus === 'in_progress' ? '#1E88E5EE' :
-                            item.currentStatus === 'accepted' ? '#F59E0BEE' : '#6B7280EE'
-                  }]}>
-                    <Text style={styles.statusOverlayText}>
-                      {(item.currentStatus || 'pending').replace('_', ' ').toUpperCase()}
-                    </Text>
-                  </View>
-                </View>
-              ) : null;
-            })()}
-
-            <View style={styles.cardInfo}>
-              <Text style={[styles.cardTitle, darkMode && styles.textWhite]} numberOfLines={1}>{item.title}</Text>
-              <Text style={[styles.cardDescription, darkMode && styles.textGray]} numberOfLines={2}>
-                {item.description || 'No description provided.'}
-              </Text>
-
-              {/* Action Bar */}
-              <View style={[styles.cardActions, darkMode && styles.cardActionsDark]}>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={async () => {
-                    try {
-                      if (!userData || !userData.firebaseUid) {
-                        Alert.alert('Error', 'Please login to upvote');
-                        return;
-                      }
-                      const res = await api.post(`/complaints/${item.id}/upvote`, { citizenUid: userData.firebaseUid });
-                      if (res.data && res.data.upvotes !== undefined) {
-                        setComplaints(prev => prev.map(c => c.id === item.id ? { ...c, upvotes: res.data.upvotes, hasUpvoted: true } : c));
-                      }
-                    } catch (e) {
-                      if (e.response && e.response.status === 400) {
-                        Alert.alert('Info', 'You have already upvoted this complaint.');
-                      } else {
-                        console.error('Upvote failed', e);
-                      }
-                    }
-                  }}
-                >
-                  <Heart
-                    size={18}
-                    color={item.hasUpvoted ? "#EF4444" : "#9CA3AF"}
-                    fill={item.hasUpvoted ? "#EF4444" : "transparent"}
-                  />
-                  <Text style={[styles.actionBtnLabel, item.hasUpvoted && { color: "#EF4444" }]}>
-                    {item.upvotes || 0}
-                  </Text>
-                </TouchableOpacity>
-
-                <View style={styles.vSeparator} />
-
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => navigation.navigate('AddEvidence', { complaintId: item.id })}
-                >
-                  <Camera size={18} color="#6B7280" />
-                  <Text style={styles.actionBtnLabel}>Evidence</Text>
-                </TouchableOpacity>
-
-                <View style={styles.vSeparator} />
-
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => openReport(item)}
-                >
-                  <AlertCircle size={18} color="#6B7280" />
-                  <Text style={styles.actionBtnLabel}>Report</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </TouchableOpacity>
+            item={item}
+            navigation={navigation}
+            userData={userData}
+            darkMode={darkMode}
+            setComplaints={setComplaints}
+            openReport={openReport}
+          />
         ))}
       </ScrollView>
       <BottomNav navigation={navigation} darkMode={darkMode} />
@@ -873,5 +927,25 @@ const styles = StyleSheet.create({
   cancelBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, borderWidth: 1, borderColor: '#D1D5DB' },
   cancelText: { color: '#374151', fontWeight: '600' },
   submitBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 6, backgroundColor: '#F59E0B' },
-  submitText: { color: 'white', fontWeight: '700' }
+  submitText: { color: 'white', fontWeight: '700' },
+  myComplaintBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginLeft: 8
+  },
+  myComplaintText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#1E40AF'
+  },
+  heartAnimation: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -40,
+    marginTop: -40,
+    opacity: 0.9
+  }
 });
