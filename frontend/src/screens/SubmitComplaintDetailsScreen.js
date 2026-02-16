@@ -88,28 +88,56 @@ export default function SubmitComplaintDetailsScreen({ navigation, onLogout, dar
         const runAllDetections = async () => {
             if (images.length === 0) return;
 
-            let bestDetection = null;
+            const detectionMap = {}; // Track unique detections by label
 
             for (const image of images) {
                 const result = await runAiDetection(image);
 
                 if (!result) continue;
 
-                // If multiple detections returned
                 const detectionsArray = result.detections ?? [result];
 
-                // Pick the one with highest confidence
                 for (const det of detectionsArray) {
-                    if (!bestDetection || det.confidence > bestDetection.confidence) {
-                        bestDetection = det;
+                    if (det.confidence >= 60) {
+                        const label = det.label?.toLowerCase() || 'unknown';
+                        if (!detectionMap[label] || det.confidence > detectionMap[label].confidence) {
+                            detectionMap[label] = det;
+                        }
                     }
                 }
             }
-            setAiResult(bestDetection); // store the best detection
+
+            const qualifiedDetections = Object.values(detectionMap);
+
+            if (qualifiedDetections.length === 0) {
+                setAiResult(null);
+            } else if (qualifiedDetections.length === 1) {
+                setAiResult(qualifiedDetections[0]);
+            } else {
+                // Multiple detections found - show selection prompt
+                showDetectionSelectionAlert(qualifiedDetections);
+            }
         };
 
         runAllDetections();
     }, [images]);
+
+    const showDetectionSelectionAlert = (detections) => {
+        const detectionOptions = detections
+            .sort((a, b) => b.confidence - a.confidence)
+            .map((det) => ({
+                text: `${det.label} (${det.confidence}%)`,
+                onPress: () => setAiResult(det),
+            }));
+
+        detectionOptions.push({ text: 'Cancel', onPress: () => setAiResult(null), style: 'cancel' });
+
+        Alert.alert(
+            'Multiple Issues Detected',
+            'The images contain multiple issues. Please select which one to report:',
+            detectionOptions
+        );
+    };
 
     useEffect(() => {
         //If location is not already set, fetch it.
