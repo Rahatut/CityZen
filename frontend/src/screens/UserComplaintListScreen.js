@@ -160,7 +160,7 @@ export default function UserComplaintListScreen({ navigation, route, darkMode, t
                                     </View>
                                     <View style={styles.cardContent}>
                                         <Text style={[styles.cardTitle, darkMode && styles.textWhite]} numberOfLines={2}>
-                                            {item.title}
+                                            #{item.id} {item.title}
                                         </Text>
                                         <Text style={[styles.cardDesc, darkMode && styles.textGray]} numberOfLines={2}>
                                             {item.description || 'No description provided'}

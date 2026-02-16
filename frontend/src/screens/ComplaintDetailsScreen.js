@@ -237,6 +237,47 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
     }, [fetchComplaintData])
   );
 
+  const handleBump = async () => {
+    try {
+      if (!userData || !userData.firebaseUid) return Alert.alert('Error', 'Please login to bump');
+
+      const res = await api.post(`/complaints/${complaintIdToFetch}/bump`);
+
+      Alert.alert("Success 🚀", "Complaint Bumped to Top of Queue!");
+      fetchComplaintData(); // Refresh to update lastBumpedAt
+    } catch (e) {
+      console.error('Bump failed', e);
+      Alert.alert('Error', e.response?.data?.message || 'Failed to bump complaint.');
+    }
+  };
+
+  // Helper to check bump eligibility
+  const canBumpComplaint = () => {
+    if (!complaint || !userData) return false;
+
+    // Robust User ID Extraction
+    let uid = userData.firebaseUid;
+    if (!uid && userData.uid && typeof userData.uid === 'string') uid = userData.uid;
+    if (!uid) uid = userData.id;
+
+    // 1. Must be owner
+    if (complaint.citizenUid !== uid) return false;
+
+    // 2. Must be open
+    if (['resolved', 'closed', 'rejected', 'completed'].includes(complaint.currentStatus)) return false;
+
+    // 3. Must be inactive > 3 days
+    const threeDays = 3 * 24 * 60 * 60 * 1000;
+    const lastActivity = complaint.lastAuthorityActivityAt || complaint.updatedAt;
+    const isInactive = (Date.now() - new Date(lastActivity).getTime()) > threeDays;
+    if (!isInactive) return false;
+
+    // 4. Must not be bumped recently
+    if (complaint.lastBumpedAt && (Date.now() - new Date(complaint.lastBumpedAt).getTime()) < threeDays) return false;
+
+    return true;
+  };
+
   return (
     <View style={[styles.container, darkMode && styles.darkContainer]}>
       <Navigation onLogout={onLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} navigation={navigation} />
@@ -271,6 +312,15 @@ export default function ComplaintDetailsScreen({ route, navigation, onLogout, da
               </Text>
             </View>
             <Text style={[styles.description, darkMode && styles.textGray]}>{complaint?.description || 'No description provided.'}</Text>
+
+            {/* Bump Button - Prominent Placement */}
+            {canBumpComplaint() && (
+              <TouchableOpacity style={styles.bumpButtonLarge} onPress={handleBump}>
+                <Text style={styles.bumpTextLarge}>🚀  Bump to Top of Queue</Text>
+                <Text style={styles.bumpSubText}>Authority hasn't responded in 3 days</Text>
+              </TouchableOpacity>
+            )}
+
             <View style={styles.actionsRow}>
               <TouchableOpacity style={styles.actionButton} onPress={handleUpvote}>
                 <Heart size={16} color={upvotes > 0 ? "#EF4444" : "#6B7280"} fill={complaint?.hasUpvoted ? "#EF4444" : "none"} />
@@ -553,6 +603,11 @@ const styles = StyleSheet.create({
   description: { color: '#4B5563', lineHeight: 22, marginBottom: 20 },
   actionsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 12 },
   actionButton: { flexDirection: 'row', alignItems: 'center' },
+  bumpButton: { backgroundColor: '#F0F9FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#BAE6FD', marginRight: 8 },
+  bumpText: { color: '#0284C7', fontWeight: 'bold', fontSize: 12 },
+  bumpButtonLarge: { backgroundColor: '#F0F9FF', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#BAE6FD', alignItems: 'center', marginBottom: 16 },
+  bumpTextLarge: { color: '#0284C7', fontWeight: 'bold', fontSize: 16 },
+  bumpSubText: { color: '#0EA5E9', fontSize: 12, marginTop: 4 },
   actionText: { fontSize: 14 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
