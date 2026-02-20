@@ -46,18 +46,32 @@ export default function LoginScreen({ navigation }) {
       });
 
       const userData = response.data; // This object contains the stored role, fullName, etc.
-      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+      const authorityCompanyId =
+        userData?.authorityCompanyId ??
+        userData?.companyId ??
+        userData?.Authority?.authorityCompanyId ??
+        userData?.authority?.authorityCompanyId ??
+        null;
+
+      const normalizedUserData = {
+        ...userData,
+        authorityCompanyId: authorityCompanyId ?? undefined,
+        companyId: authorityCompanyId ?? undefined,
+      };
 
       // Store user data in AsyncStorage for later use (upvotes, profile, etc.)
-      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+      await AsyncStorage.setItem('userData', JSON.stringify(normalizedUserData));
       await AsyncStorage.setItem('userToken', firebaseUser.uid); // Store Firebase UID as token
+      if (normalizedUserData.role === 'authority' && authorityCompanyId != null) {
+        await AsyncStorage.setItem('authorityCompanyId', String(authorityCompanyId));
+      }
 
       // 3. Navigation based on Role fetched from the database
       // Check App.js for the exact screen names
-      if (userData.role === 'admin') {
+      if (normalizedUserData.role === 'admin') {
         // Navigates to <Stack.Screen name="AdminDashboard" />
         navigation.replace('AdminDashboard');
-      } else if (userData.role === 'authority') {
+      } else if (normalizedUserData.role === 'authority') {
         // Navigates to <Stack.Screen name="AuthorityDashboard" />
         navigation.replace('AuthorityDashboard');
       } else {

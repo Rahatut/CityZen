@@ -45,9 +45,26 @@ export const NotificationProvider = ({ children }) => {
     const [userRole, setUserRole] = useState(null); // Track user role
     const lastStatusesRef = useRef({}); // Ref to avoid stale closure
     const lastCountsRef = useRef({ reports: 0, appeals: 0 });
+    const citizenPollInFlightRef = useRef(false);
+    const adminPollInFlightRef = useRef(false);
+    const authorityPollInFlightRef = useRef(false);
 
     const setNavigation = (nav) => {
         navigation.current = nav;
+    };
+
+    const getAuthorityCompanyId = (userData, fallback = null) => {
+        if (!userData || typeof userData !== 'object') return fallback;
+        const direct =
+            userData.authorityCompanyId ??
+            userData.companyId ??
+            userData?.Authority?.authorityCompanyId ??
+            userData?.authority?.authorityCompanyId;
+
+        if (direct === null || direct === undefined || direct === '') {
+            return fallback;
+        }
+        return String(direct);
     };
 
     // Get user-specific storage key
@@ -267,7 +284,9 @@ export const NotificationProvider = ({ children }) => {
                 if (!uid) uid = userData.id || userData.uid;
 
                 const role = userData.role || 'citizen';
-                const compId = (role === 'authority') ? (userData.id || authCompanyIdFromStorage) : null;
+                const compId = role === 'authority'
+                    ? getAuthorityCompanyId(userData, authCompanyIdFromStorage)
+                    : null;
 
                 console.log('NotificationProvider: New state targets:', { role, uid, compId });
 
@@ -280,6 +299,9 @@ export const NotificationProvider = ({ children }) => {
                 if (compId && compId !== authorityCompanyId) {
                     console.log('NotificationProvider: Setting authority company ID:', compId);
                     setAuthorityCompanyId(compId);
+                }
+                if (role === 'authority' && compId) {
+                    await AsyncStorage.setItem('authorityCompanyId', String(compId));
                 }
 
                 // Reset histories if user ID changed
@@ -373,6 +395,11 @@ export const NotificationProvider = ({ children }) => {
             return;
         }
 
+        if (citizenPollInFlightRef.current) {
+            return;
+        }
+        citizenPollInFlightRef.current = true;
+
         // console.log("NotificationContext: Polling for user:", currentUid);
 
         try {
@@ -435,6 +462,8 @@ export const NotificationProvider = ({ children }) => {
             if (userRole === 'citizen') {
                 console.error("Failed to fetch complaints", error);
             }
+        } finally {
+            citizenPollInFlightRef.current = false;
         }
     };
 
@@ -472,6 +501,11 @@ export const NotificationProvider = ({ children }) => {
             //console.log('AdminPolling: Skipping - on unauthenticated screen:', currentRoute);
             return;
         }
+
+        if (adminPollInFlightRef.current) {
+            return;
+        }
+        adminPollInFlightRef.current = true;
 
         console.log('AdminPolling: Fetching reports and appeals...');
 
@@ -552,6 +586,8 @@ export const NotificationProvider = ({ children }) => {
 
         } catch (error) {
             console.error('Admin polling error:', error.message, error);
+        } finally {
+            adminPollInFlightRef.current = false;
         }
     };
 
@@ -571,6 +607,11 @@ export const NotificationProvider = ({ children }) => {
             console.log('AuthorityPolling: Skipping - on unauthenticated screen:', currentRoute);
             return;
         }
+
+        if (authorityPollInFlightRef.current) {
+            return;
+        }
+        authorityPollInFlightRef.current = true;
 
         console.log('AuthorityPolling: Fetching assignments for company:', authorityCompanyId);
 
@@ -675,6 +716,8 @@ export const NotificationProvider = ({ children }) => {
 
         } catch (error) {
             console.error('Authority polling error:', error.message, error);
+        } finally {
+            authorityPollInFlightRef.current = false;
         }
     };
 

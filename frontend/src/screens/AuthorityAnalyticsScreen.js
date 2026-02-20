@@ -35,18 +35,38 @@ export default function AuthorityAnalyticsScreen({ navigation: navigationProp })
 	useEffect(() => { fetchAnalytics(); }, []);
 	useEffect(() => { filterByPeriod(selectedPeriod, selectedMonth, selectedYear); }, [selectedPeriod, selectedMonth, selectedYear, deptComplaints]);
 
+	const extractAuthorityCompanyId = (userData) => {
+		if (!userData || typeof userData !== 'object') return null;
+		return (
+			userData.authorityCompanyId ??
+			userData.companyId ??
+			userData?.Authority?.authorityCompanyId ??
+			userData?.authority?.authorityCompanyId ??
+			null
+		);
+	};
+
 	const fetchAnalytics = async () => {
 		setLoading(true);
 		try {
 			let companyId = await AsyncStorage.getItem('authorityCompanyId');
-			if (!companyId) {
+			if (!companyId || companyId === 'undefined' || companyId === 'null') {
 				const userDataStr = await AsyncStorage.getItem('userData');
 				if (userDataStr) {
 					const userData = JSON.parse(userDataStr);
-					companyId = userData.companyId || userData.authorityCompanyId;
+					companyId = extractAuthorityCompanyId(userData);
 				}
 			}
-			let response = companyId ? await api.get(`/complaints/authority/${companyId}?limit=100`) : await api.get('/complaints?limit=100');
+			if (!companyId) {
+				setDeptComplaints([]);
+				setFilteredComplaints([]);
+				setMetrics({
+					total: 0, resolved: 0, pending: 0, appealed: 0, accepted: 0, inProgress: 0, avgResolution: 0, avgRating: 0,
+				});
+				return;
+			}
+			await AsyncStorage.setItem('authorityCompanyId', String(companyId));
+			const response = await api.get(`/complaints/authority/${companyId}?limit=100`);
 			const complaints = response.data.complaints || response.data;
 			setDeptComplaints(complaints);
 		} catch (e) {

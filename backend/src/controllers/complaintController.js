@@ -1132,6 +1132,7 @@ exports.deleteComplaint = async (req, res) => {
 
     const complaint = await Complaint.findByPk(id);
     if (!complaint) {
+      await t.rollback();
       return res.status(404).json({ message: 'Complaint not found.' });
     }
 
@@ -1300,6 +1301,7 @@ exports.reportComplaint = async (req, res) => {
     }
 
     if (!complaintId || !reportedBy || !reason) {
+      await t.rollback();
       return res.status(400).json({
         message: 'Missing required fields: complaintId, reportedBy, reason'
       });
@@ -1321,6 +1323,7 @@ exports.reportComplaint = async (req, res) => {
     ];
 
     if (!validReasons.includes(reason)) {
+      await t.rollback();
       return res.status(400).json({
         message: `Invalid reason. Must be one of: ${validReasons.join(', ')}`
       });
@@ -1329,6 +1332,7 @@ exports.reportComplaint = async (req, res) => {
     // Check if complaint exists
     const complaint = await Complaint.findByPk(complaintId);
     if (!complaint) {
+      await t.rollback();
       return res.status(404).json({ message: 'Complaint not found' });
     }
 
@@ -1614,9 +1618,11 @@ exports.addEvidenceToComplaint = async (req, res) => {
     const imageFiles = req.files;
 
     if (!complaintId) {
+      await t.rollback();
       return res.status(400).json({ message: 'Complaint ID is required.' });
     }
     if (!imageFiles || imageFiles.length === 0) {
+      await t.rollback();
       return res.status(400).json({ message: 'Image files are required.' });
     }
 

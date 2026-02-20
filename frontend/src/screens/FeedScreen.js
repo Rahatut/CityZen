@@ -219,15 +219,31 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
 
       let url = '/complaints?page=1&limit=50';
       let authorityCompanyId = null;
+      const extractAuthorityCompanyId = (userData) => {
+        if (!userData || typeof userData !== 'object') return null;
+        return (
+          userData.authorityCompanyId ??
+          userData.companyId ??
+          userData?.Authority?.authorityCompanyId ??
+          userData?.authority?.authorityCompanyId ??
+          null
+        );
+      };
 
       if (retrievedUserData && retrievedUserData.role === 'authority') {
         // Try to get companyId from userData or AsyncStorage
-        authorityCompanyId = retrievedUserData.companyId || retrievedUserData.authorityCompanyId;
-        if (!authorityCompanyId) {
+        authorityCompanyId = extractAuthorityCompanyId(retrievedUserData);
+        if (!authorityCompanyId || authorityCompanyId === 'undefined' || authorityCompanyId === 'null') {
           authorityCompanyId = await AsyncStorage.getItem('authorityCompanyId');
         }
         if (authorityCompanyId) {
           url = `/complaints/authority/${authorityCompanyId}?limit=50`;
+          await AsyncStorage.setItem('authorityCompanyId', String(authorityCompanyId));
+        } else {
+          setError('Authority department mapping not found. Please relogin.');
+          setLoading(false);
+          setRefreshing(false);
+          return;
         }
       } else if (retrievedUserData && retrievedUserData.firebaseUid) {
         url = `/complaints?page=1&limit=50&citizenUid=${retrievedUserData.firebaseUid}`;
@@ -272,7 +288,6 @@ export default function FeedScreen({ navigation, onLogout, darkMode, toggleDarkM
       }
 
       setError(errorMessage);
-      setComplaints([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
