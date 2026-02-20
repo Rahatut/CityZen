@@ -13,7 +13,9 @@ import axios from 'axios';
 import { auth } from '../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const AUTH_API_URL = API_URL + '/auth';
+console.log('SignupScreen AUTH_API_URL:', AUTH_API_URL);
 
 export default function SignupScreen({ navigation }) {
 
@@ -28,13 +30,20 @@ export default function SignupScreen({ navigation }) {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
+    phoneNumber: '',
     password: '',
     confirmPassword: '',
-
     department: '',
     authorityCompanyId: '',
     adminCode: '',
   });
+  const [verificationId, setVerificationId] = useState(null);
+  const [otp, setOtp] = useState('');
+  const [error, setError] = useState('');
+  // Only declare step/setStep ONCE:
+  // const [step, setStep] = useState(1); // Already declared above, keep only one
+  const [twoFAMethod, setTwoFAMethod] = useState('email');
+  const [otpSent, setOtpSent] = useState(false);
 
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -60,49 +69,131 @@ export default function SignupScreen({ navigation }) {
     else setDepartments([]);
   }, [role]);
 
-  const handleSignUp = async () => {
-    if (!formData.email || !formData.password || !formData.fullName) {
-      Alert.alert('Missing Fields', 'Please fill in all required fields.');
-      return;
-    }
+  // Send OTP (email by default)
+  const handleSendOtp = async () => {
     if (formData.password !== formData.confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+      Alert.alert('Error', 'Passwords do not match!');
       return;
     }
-    if (!agreeTerms) {
-      Alert.alert('Terms', 'You must agree to the Terms & Privacy Policy.');
+    if (!formData.email) {
+      Alert.alert('Error', 'Email is required!');
       return;
     }
-
+    if (!formData.phoneNumber) {
+      Alert.alert('Error', 'Phone number is required!');
+      return;
+    }
+    setTwoFAMethod('email');
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
-      const profileData = {
-        firebaseUid: userCredential.user.uid,
-        role,
-        fullName: formData.fullName,
-        email: formData.email,
-
-        department: formData.department,
-        authorityCompanyId: role === 'authority' ? formData.authorityCompanyId : undefined,
-        adminCode: formData.adminCode,
-      };
-      const response = await axios.post(`${API_URL}/api/users`, profileData, {
-        headers: { 'Content-Type': 'application/json', 'bypass-tunnel-reminder': 'true' }
+      const url = `${API_URL}/api/auth/send-email-otp`;
+      console.log('Sending OTP to:', url);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email }),
       });
-      if (response.status === 201) setStep(3);
-      else Alert.alert('Error', 'Profile creation failed.');
-    } catch (error) {
-      let msg = 'Unexpected error';
-      if (error.code === 'auth/email-already-in-use') msg = 'Email already in use!';
-      else if (!error.response) msg = 'Connection failed.';
-      else if (error.response?.data?.message) msg = error.response.data.message;
-      Alert.alert('Sign Up Error', msg);
-      console.error(error);
+      const text = await response.text();
+      console.log('OTP raw response:', text);
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error('OTP response is not JSON:', text);
+        Alert.alert('OTP Error', 'Server did not return JSON. Check backend logs.');
+        setLoading(false);
+        return;
+      }
+      if (response.ok) {
+        setOtpSent(true);
+        setStep(3);
+      } else {
+        Alert.alert('OTP Error', data.message || 'Failed to send OTP.');
+      }
+    } catch (err) {
+      Alert.alert('OTP Error', err.message || 'Failed to send OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Switch to phone OTP at OTP step
+  const handleSwitchToPhone = async () => {
+    setTwoFAMethod('phone');
+    setOtp('');
+    setError('');
+    setLoading(true);
+    try {
+      const url = `${API_URL}/api/auth/send-phone-otp`;
+      console.log('Sending phone OTP to:', url);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: formData.phoneNumber }),
+      });
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error('Phone OTP response is not JSON:', text);
+        Alert.alert('OTP Error', 'Server did not return JSON. Check backend logs.');
+        setLoading(false);
+        return;
+      }
+      if (response.ok) {
+        setOtpSent(true);
+        setStep(3);
+      } else {
+        Alert.alert('OTP Error', data.message || 'Failed to send OTP.');
+      }
+    } catch (err) {
+      Alert.alert('OTP Error', err.message || 'Failed to send OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Switch to email OTP at OTP step
+  const handleSwitchToEmail = async () => {
+    setTwoFAMethod('email');
+    setOtp('');
+    setError('');
+    await handleSendOtp();
+  };
+
+  // Submit OTP and register
+  const handleOtpSubmit = async () => {
+    if (!otp) {
+      Alert.alert('Error', 'Please enter the OTP sent to your ' + (twoFAMethod === 'phone' ? 'phone.' : 'email.'));
+      return;
+    }
+    setLoading(true);
+    try {
+      // For phone: verify OTP with Firebase, get idToken
+      // For email: verify OTP with backend
+      const payload = { ...formData, otp, twoFAMethod, role };
+      // Add firebaseUid for citizen
+      if (!payload.firebaseUid) {
+        payload.firebaseUid = 'citizen-' + Date.now(); // fallback if not using Firebase Auth
+      }
+      try {
+        const response = await fetch(`${API_URL}/api/auth/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setStep(4);
+        } else {
+          Alert.alert('Registration Error', data.message || 'Registration failed.');
+        }
+      } catch (err) {
+        Alert.alert('Registration Error', err.message || 'Registration failed.');
+      }
+    } catch (err) {
+      Alert.alert('Registration Error', err.message || 'Registration failed.');
     } finally {
       setLoading(false);
     }
@@ -110,7 +201,7 @@ export default function SignupScreen({ navigation }) {
 
   const handleNext = () => {
     if (step === 1) setStep(2);
-    else handleSignUp();
+    else if (step === 2) handleSendOtp();
   };
 
   const renderRoleSelection = () => (
@@ -181,12 +272,16 @@ export default function SignupScreen({ navigation }) {
         </View>
       )}
 
+      {/* Phone Number Field */}
+      <View style={styles.inputWrapper}>
+        <Mail size={20} color="#9CA3AF" />
+        <TextInput style={styles.input} placeholder="Phone Number (e.g. +1234567890)" keyboardType="phone-pad" onChangeText={t => setFormData({ ...formData, phoneNumber: t })} />
+      </View>
+
       <View style={styles.inputWrapper}>
         <Mail size={20} color="#9CA3AF" />
         <TextInput style={styles.input} placeholder={role === 'authority' ? "Official Email / ID" : "Email Address"} keyboardType="email-address" onChangeText={t => setFormData({ ...formData, email: t })} />
       </View>
-
-
 
       <View style={styles.inputWrapper}>
         <Lock size={20} color="#9CA3AF" />
@@ -217,6 +312,32 @@ export default function SignupScreen({ navigation }) {
     </View>
   );
 
+  // OTP Step
+  const renderOtpStep = () => (
+    <View>
+      <Text style={styles.stepTitle}>Verify your {twoFAMethod === 'phone' ? 'Phone' : 'Email'}</Text>
+      <Text style={{ color: '#6B7280', marginBottom: 16 }}>
+        An OTP has been sent to your {twoFAMethod === 'phone' ? 'phone number' : 'email address'}.
+      </Text>
+      <TextInput
+        style={[styles.input, { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 12, marginBottom: 16 }]}
+        placeholder="Enter OTP"
+        keyboardType="number-pad"
+        value={otp}
+        onChangeText={setOtp}
+      />
+      <TouchableOpacity onPress={handleOtpSubmit} style={styles.submitBtn} disabled={loading}>
+        {loading ? <ActivityIndicator color="white" /> : <Text style={styles.submitBtnText}>Submit</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity onPress={twoFAMethod === 'email' ? handleSwitchToPhone : handleSwitchToEmail}>
+        <Text style={{ color: '#1E88E5', textAlign: 'center', marginTop: 12 }}>
+          Or verify using {twoFAMethod === 'email' ? 'SMS' : 'Email'} instead
+        </Text>
+      </TouchableOpacity>
+      {error ? <Text style={{ color: 'red', marginTop: 8 }}>{error}</Text> : null}
+    </View>
+  );
+
   const renderSuccess = () => (
     <View style={styles.successContainer}>
       <CheckCircle size={80} color="#16A34A" />
@@ -238,9 +359,10 @@ export default function SignupScreen({ navigation }) {
 
         {step === 1 && renderRoleSelection()}
         {step === 2 && renderForm()}
-        {step === 3 && renderSuccess()}
+        {step === 3 && renderOtpStep()}
+        {step === 4 && renderSuccess()}
 
-        {step !== 3 && (
+        {step !== 4 && (
           <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.loginLink} disabled={loading}>
             <Text style={{ color: '#6B7280' }}>Already have an account? <Text style={{ color: '#1E88E5', fontWeight: 'bold' }}>Log in</Text></Text>
           </TouchableOpacity>

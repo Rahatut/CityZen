@@ -1,3 +1,17 @@
+// Email OTP 2FA
+const { sendEmailOTP, verifyEmailOTP } = require('../utils/emailOtp');
+
+// Send OTP to email for 2FA
+exports.sendEmailOtp = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: 'Email is required.' });
+  try {
+    await sendEmailOTP(email);
+    res.json({ message: 'OTP sent to email.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to send OTP.' });
+  }
+};
 // backend/src/controllers/authController.js
 const { User, Citizen, Authority, Admin, sequelize } = require('../models');
 
@@ -5,29 +19,53 @@ const { User, Citizen, Authority, Admin, sequelize } = require('../models');
 const ADMIN_CODE_SECRET = process.env.ADMIN_CODE_SECRET;
 
 // 1. SIGNUP Logic (Existing)
+const { verifyFirebasePhoneToken } = require('../utils/firebaseVerify');
 exports.registerProfile = async (req, res) => {
   // Use a transaction to prevent partial data creation
   const t = await sequelize.transaction();
   try {
-    const { firebaseUid, email, fullName, role, ward, department, authorityCompanyId, adminCode } = req.body;
+    console.log('RegisterProfile payload:', req.body);
+    const { firebaseUid, email, phoneNumber, fullName, role, ward, department, authorityCompanyId, adminCode, firebaseIdToken, twoFAMethod, otp } = req.body;
 
     if (!firebaseUid || !email || !fullName || !role) {
       return res.status(400).json({ message: 'Missing core identity fields.' });
     }
 
+    if (twoFAMethod === 'phone') {
+      if (!phoneNumber || !firebaseIdToken) {
+        return res.status(400).json({ message: 'Phone number and Firebase ID token required for phone 2FA.' });
+      }
+      // Verify Firebase ID token and phone number
+      let verified;
+      try {
+        verified = await verifyFirebasePhoneToken(firebaseIdToken);
+      } catch (err) {
+        return res.status(400).json({ message: 'Phone number not verified with Firebase.' });
+      }
+      if (verified.phone_number !== phoneNumber) {
+        return res.status(400).json({ message: 'Phone number does not match verified Firebase phone.' });
+      }
+    } else if (twoFAMethod === 'email') {
+      if (!otp) {
+        return res.status(400).json({ message: 'OTP required for email 2FA.' });
+      }
+      if (!verifyEmailOTP(email, otp)) {
+        return res.status(400).json({ message: 'Invalid or expired email OTP.' });
+      }
+    } else {
+      return res.status(400).json({ message: 'Invalid 2FA method.' });
+    }
+
     // 1. Create the base User
-    const user = await User.create({ firebaseUid, email, fullName, role }, { transaction: t });
+    const user = await User.create({ firebaseUid, email, phoneNumber, fullName, role }, { transaction: t });
 
     // 2. Create role-specific profile based on the role submitted from the form
     if (role === 'citizen') {
-      // ward is optional/removed
       await Citizen.create({ UserFirebaseUid: firebaseUid }, { transaction: t });
     } else if (role === 'authority') {
       if (!authorityCompanyId) throw new Error('Authority signup requires Department selection.');
-      // Optionally, department name can be stored for display, but authorityCompanyId is the main mapping
       await Authority.create({ UserFirebaseUid: firebaseUid, authorityCompanyId, department }, { transaction: t });
     } else if (role === 'admin') {
-      // Allow admin signup with any provided code
       await Admin.create({ UserFirebaseUid: firebaseUid }, { transaction: t });
     }
 
@@ -35,12 +73,8 @@ exports.registerProfile = async (req, res) => {
     await t.commit();
     res.status(201).json({ message: 'Profile created successfully', user });
   } catch (error) {
-    // Rollback if any step failed (e.g., missing data, invalid Admin code, DB error)
     await t.rollback();
-
-    console.error('Registration Error:', error.message);
-
-    // Send a 400 status with a specific error message back to the frontend
+    console.error('Registration Error:', error);
     res.status(400).json({ message: `Profile creation failed: ${error.message}` });
   }
 };

@@ -12,6 +12,7 @@ const AuthorityCompanyCategory = require('./AuthorityCompanyCategory');
 const AuthorityCompanyAreas = require('./AuthorityCompanyAreas');
 const Upvote = require('./Upvote');
 const ComplaintReport = require('./ComplaintReport');
+const EmailOtp = require('./EmailOtp');
 
 // --- Define Associations (One-to-One) ---
 
@@ -113,7 +114,6 @@ Upvote.belongsTo(Citizen, { foreignKey: 'citizenUid', targetKey: 'UserFirebaseUi
 Complaint.hasMany(ComplaintReport, { foreignKey: 'complaintId', as: 'reports' });
 ComplaintReport.belongsTo(Complaint, { foreignKey: 'complaintId' });
 
-
 module.exports = {
   sequelize,
   User,
@@ -121,12 +121,13 @@ module.exports = {
   Authority,
   Admin,
   Complaint,
-  ComplaintImages,
-  AuthorityCompany,
   Category,
-  AuthorityCompanyCategory,
+  AuthorityCompany,
+  ComplaintImages,
   ComplaintAssignment,
+  AuthorityCompanyCategory,
   AuthorityCompanyAreas,
   Upvote,
-  ComplaintReport
+  ComplaintReport,
+  EmailOtp
 };

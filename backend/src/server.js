@@ -57,7 +57,7 @@ async function startServer() {
     });
 
     // API Routes
-    app.use('/api', authRoutes);
+    app.use('/api/auth', authRoutes);
     app.use('/api', complaintRoutes);
     app.use('/api/ai', aiRoutes);
     app.use('/api/moderation', moderationRoutes);

@@ -11,7 +11,8 @@ import { auth } from '../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const AUTH_API_URL = API_URL + '/auth';
 
 export default function LoginScreen({ navigation }) {
   // NOTE: Role state is kept for UI only; actual login role is fetched from DB
@@ -38,7 +39,7 @@ export default function LoginScreen({ navigation }) {
       const firebaseUser = userCredential.user;
 
       // 2. Fetch User Profile & Role from your Express Backend
-      const response = await axios.get(`${API_URL}/api/users/${firebaseUser.uid}`, {
+      const response = await axios.get(`${AUTH_API_URL}/users/${firebaseUser.uid}`, {
         headers: {
           'bypass-tunnel-reminder': 'true', // CRITICAL: Localtunnel fix
           'Content-Type': 'application/json'
