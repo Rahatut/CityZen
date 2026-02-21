@@ -46,7 +46,9 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
   const handleNotificationClick = async (notif) => {
     await markAsRead(notif.uniqId);
     onClose();
-    if (notif.id) {
+    if (notif.type === 'strike_warning') {
+      navigation?.navigate('Profile');
+    } else if (notif.id) {
       navigation?.navigate('ComplaintDetails', { id: notif.id });
     }
   };
@@ -65,12 +67,16 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
         return <CheckCircle size={16} color="#10B981" />;
       case 'pending':
         return <Clock size={16} color="#F59E0B" />;
+      case 'strike_warning':
+        return <AlertTriangle size={16} color="#EF4444" />;
       default:
         return <Bell size={16} color="#6B7280" />;
     }
   };
 
-  const getStatusColor = (message) => {
+  const getStatusColor = (notif) => {
+    if (notif?.type === 'strike_warning') return '#EF4444';
+    const message = notif?.message || '';
     if (message.includes('Resolved') || message.includes('Completed')) return '#10B981';
     if (message.includes('Rejected')) return '#EF4444';
     if (message.includes('In Progress') || message.includes('Accepted')) return '#F59E0B';
@@ -186,7 +192,7 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
               style={[styles.notifItem, styles.unreadItem, darkMode && styles.notifItemDark]}
               onPress={() => handleNotificationClick(notif)}
             >
-              <View style={[styles.indicator, { backgroundColor: getStatusColor(notif.message) }]} />
+              <View style={[styles.indicator, { backgroundColor: getStatusColor(notif) }]} />
               <View style={styles.notifContent}>
                 <View style={styles.notifHeader}>
                   {getStatusIcon(notif.type)}
@@ -225,7 +231,9 @@ export default function NotificationDropdown({ visible, onClose, darkMode, navig
                 style={styles.notifContent}
                 onPress={() => {
                   onClose();
-                  if (notif.id) {
+                  if (notif.type === 'strike_warning') {
+                    navigation?.navigate('Profile');
+                  } else if (notif.id) {
                     navigation?.navigate('ComplaintDetails', { id: notif.id });
                   }
                 }}

@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native
 import { useNotification } from '../context/NotificationContext';
 import Navigation from '../components/Navigation';
 import BottomNav from '../components/BottomNav';
-import { Bell, CheckCircle, Clock, AlertCircle, Info } from 'lucide-react-native';
+import { Bell, CheckCircle, Clock, AlertCircle, Info, AlertTriangle } from 'lucide-react-native';
 
 export default function NotificationsScreen({ navigation, onLogout, darkMode, toggleDarkMode }) {
     const { history, markAsRead, markAllAsRead } = useNotification();
@@ -22,13 +22,16 @@ export default function NotificationsScreen({ navigation, onLogout, darkMode, to
         }
 
         // Navigate to complaint details
-        if (item.complaint && item.complaint.id) {
+        if (item.type === 'strike_warning') {
+            navigation.navigate('Profile');
+        } else if (item.complaint && item.complaint.id) {
             navigation.navigate('ComplaintDetails', { complaintId: item.complaint.id });
         }
     };
 
     const renderItem = ({ item }) => {
         const isStatusUpdate = item.type === 'status_update' || item.title === 'Status Update';
+        const isStrikeWarning = item.type === 'strike_warning';
         const isUnread = !item.read;
 
         return (
@@ -40,8 +43,8 @@ export default function NotificationsScreen({ navigation, onLogout, darkMode, to
                 ]}
                 onPress={() => handleNotificationPress(item)}
             >
-                <View style={[styles.iconBox, { backgroundColor: isStatusUpdate ? '#EFF6FF' : '#F3F4F6' }]}>
-                    {isStatusUpdate ? <Info size={24} color="#1E88E5" /> : <Bell size={24} color="#6B7280" />}
+                <View style={[styles.iconBox, { backgroundColor: isStrikeWarning ? '#FEE2E2' : (isStatusUpdate ? '#EFF6FF' : '#F3F4F6') }]}>
+                    {isStrikeWarning ? <AlertTriangle size={24} color="#EF4444" /> : (isStatusUpdate ? <Info size={24} color="#1E88E5" /> : <Bell size={24} color="#6B7280" />)}
                 </View>
                 <View style={{ flex: 1 }}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>

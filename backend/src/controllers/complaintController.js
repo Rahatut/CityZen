@@ -1130,11 +1130,31 @@ exports.deleteComplaint = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const complaint = await Complaint.findByPk(id);
+    const complaint = await Complaint.findByPk(id, { transaction: t });
     if (!complaint) {
       await t.rollback();
       return res.status(404).json({ message: 'Complaint not found.' });
     }
+
+    // Delete dependent rows first to avoid FK constraint failures on complaint delete.
+    await Promise.all([
+      ComplaintAssignment.destroy({
+        where: { complaintId: id },
+        transaction: t,
+      }),
+      ComplaintImages.destroy({
+        where: { complaintId: id },
+        transaction: t,
+      }),
+      ComplaintReport.destroy({
+        where: { complaintId: id },
+        transaction: t,
+      }),
+      Upvote.destroy({
+        where: { complaintId: id },
+        transaction: t,
+      }),
+    ]);
 
     await Complaint.destroy({
       where: { id },
@@ -1699,7 +1719,7 @@ exports.updateAppealStatus = async (req, res) => {
       });
     }
 
-    const complaint = await Complaint.findByPk(id);
+    const complaint = await Complaint.findByPk(id, { transaction: t });
     if (!complaint) {
       await t.rollback();
       return res.status(404).json({ message: 'Complaint not found' });

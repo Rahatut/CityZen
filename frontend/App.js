@@ -12,15 +12,27 @@ const NavigationAware = () => {
   const { setNavigation: setAdminNavigation } = useAdminNotification();
 
   React.useEffect(() => {
-    console.log('NavigationAware: Route changed, syncing navigation and refreshing user...');
+    console.log('NavigationAware: syncing navigation and wiring user refresh listeners...');
     setNavigation(navigation);
     setAdminNavigation(navigation);
-    // Refresh user role state on every navigation transition
+
     if (refreshUser) {
-      console.log('NavigationAware: Triggering refreshUser()');
-      refreshUser();
+      refreshUser(); // Initial sync
     }
-  }, [navigation]);
+
+    const unsubscribeState = navigation.addListener('state', () => {
+      if (refreshUser) refreshUser();
+    });
+
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      if (refreshUser) refreshUser();
+    });
+
+    return () => {
+      unsubscribeState();
+      unsubscribeFocus();
+    };
+  }, [navigation, refreshUser]);
 
   return null;
 };

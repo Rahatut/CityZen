@@ -1,44 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Platform, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'react-native';
 import { Bell, Moon, Sun, Building2, LogOut } from 'lucide-react-native';
 import { useNotification, useAdminNotification, useAuthorityNotification } from '../context/NotificationContext';
 import NotificationDropdown from './NotificationDropdown';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Navigation({ onLogout, darkMode, toggleDarkMode, navigation }) {
-  const { history, logout } = useNotification();
-  const { getTotalUnreadCount, isAdmin } = useAdminNotification();
-  const { getAuthorityUnreadCount, isAuthority } = useAuthorityNotification();
+  const { history, logout, userRole: contextUserRole } = useNotification();
+  const { getTotalUnreadCount } = useAdminNotification();
+  const { getAuthorityUnreadCount } = useAuthorityNotification();
   const [showDropdown, setShowDropdown] = useState(false);
-  const [userRole, setUserRole] = useState('citizen');
+  const userRole = contextUserRole;
 
   // Log navigation prop
   useEffect(() => {
     console.log('Navigation component - navigation prop:', !!navigation, navigation);
   }, [navigation]);
 
-  // Determine user role
-  useEffect(() => {
-    const getUserRole = async () => {
-      try {
-        const userDataStr = await AsyncStorage.getItem('userData');
-        if (userDataStr) {
-          const userData = JSON.parse(userDataStr);
-          setUserRole(userData.role || 'citizen');
-        }
-      } catch (error) {
-        console.error('Error getting user role:', error);
-      }
-    };
-    getUserRole();
-  }, []);
-
   // Calculate unread count based on role
   const unreadCount = userRole === 'admin'
     ? getTotalUnreadCount()
     : userRole === 'authority'
       ? (getAuthorityUnreadCount ? getAuthorityUnreadCount() : 0)
-      : (history ? history.filter(n => !n.read).length : 0);
+      : userRole === 'citizen'
+        ? (history ? history.filter(n => !n.read).length : 0)
+        : 0;
 
   const handleNotificationPress = () => {
     setShowDropdown(!showDropdown);

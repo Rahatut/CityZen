@@ -10,10 +10,12 @@ import axios from 'axios';
 import { auth } from '../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNotification } from '../context/NotificationContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function LoginScreen({ navigation }) {
+  const { refreshUser } = useNotification();
   // NOTE: Role state is kept for UI only; actual login role is fetched from DB
   const [role, setRole] = useState('citizen');
   const [email, setEmail] = useState('');
@@ -64,6 +66,9 @@ export default function LoginScreen({ navigation }) {
       await AsyncStorage.setItem('userToken', firebaseUser.uid); // Store Firebase UID as token
       if (normalizedUserData.role === 'authority' && authorityCompanyId != null) {
         await AsyncStorage.setItem('authorityCompanyId', String(authorityCompanyId));
+      }
+      if (refreshUser) {
+        await refreshUser();
       }
 
       // 3. Navigation based on Role fetched from the database
