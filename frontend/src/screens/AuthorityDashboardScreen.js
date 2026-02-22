@@ -61,23 +61,50 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
   const [categories, setCategories] = useState([]);
   const [activeFilterCount, setActiveFilterCount] = useState(0);
 
+  const extractAuthorityCompanyId = (userData) => {
+    if (!userData || typeof userData !== 'object') return null;
+    return (
+      userData.authorityCompanyId ??
+      userData.companyId ??
+      userData?.Authority?.authorityCompanyId ??
+      userData?.authority?.authorityCompanyId ??
+      null
+    );
+  };
+
+  const resolveAuthorityCompanyId = async () => {
+    if (selectedCompany != null && selectedCompany !== '') return String(selectedCompany);
+    if (profileData?.Authority?.authorityCompanyId != null) {
+      return String(profileData.Authority.authorityCompanyId);
+    }
+
+    const userDataStr = await AsyncStorage.getItem('userData');
+    const userData = userDataStr ? JSON.parse(userDataStr) : null;
+    const fromUserData = extractAuthorityCompanyId(userData);
+    if (fromUserData != null && fromUserData !== '') {
+      return String(fromUserData);
+    }
+
+    const fromStorage = await AsyncStorage.getItem('authorityCompanyId');
+    return fromStorage ? String(fromStorage) : null;
+  };
+
   // Fetch complaints
   const fetchComplaints = async () => {
     setLoading(true);
     try {
-      let companyId = selectedCompany;
+      const companyId = await resolveAuthorityCompanyId();
       if (!companyId) {
-        // Try to get from AsyncStorage if not in state
-        companyId = await AsyncStorage.getItem('authorityCompanyId');
+        setComplaints([]);
+        return;
       }
-      let response;
-      if (companyId) {
-        // Fetch complaints for the selected company
-        response = await api.get(`/complaints/authority/${companyId}?limit=100`);
-      } else {
-        // No company mapping, show all complaints
-        response = await api.get('/complaints?limit=100');
+
+      if (String(selectedCompany || '') !== String(companyId)) {
+        setSelectedCompany(String(companyId));
       }
+      await AsyncStorage.setItem('authorityCompanyId', String(companyId));
+
+      const response = await api.get(`/complaints/authority/${companyId}?limit=100`);
       console.log('AuthorityDashboard: Received response:', response.data);
       if (response.data && (response.data.complaints || Array.isArray(response.data))) {
         // Support both { complaints: [] } and []
@@ -161,7 +188,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
         } else {
           const authCompanyId = response.data?.Authority?.authorityCompanyId;
           if (authCompanyId != null) {
-            setSelectedCompany(authCompanyId);
+            setSelectedCompany(String(authCompanyId));
             await AsyncStorage.setItem('authorityCompanyId', String(authCompanyId));
           } else {
             // Fallback if authority data is incomplete but user exists
@@ -189,7 +216,7 @@ export default function AuthorityDashboardScreen({ navigation, onLogout, darkMod
   );
   // Handle company selection
   const handleCompanySelect = async (companyId) => {
-    setSelectedCompany(companyId);
+    setSelectedCompany(String(companyId));
     setCompanyModalVisible(false);
     await AsyncStorage.setItem('authorityCompanyId', String(companyId));
     // Optionally, update backend user profile here if needed

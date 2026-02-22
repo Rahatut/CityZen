@@ -1,8 +1,7 @@
 
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, TouchableOpacity, Animated, StyleSheet, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
 import api from '../services/api';
 import { Bell, X, AlertTriangle, Flag } from 'lucide-react-native';
 
@@ -18,6 +17,7 @@ export const NotificationProvider = ({ children }) => {
     // Citizen notification state
     const [notification, setNotification] = useState(null);
     const [lastStatuses, setLastStatuses] = useState({});
+    const [lastStrikeCount, setLastStrikeCount] = useState(null);
     const [history, setHistory] = useState([]); // Notification history
     const [currentUid, setCurrentUid] = useState(null); // Track current user
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -44,10 +44,68 @@ export const NotificationProvider = ({ children }) => {
     const navigation = useRef(null);
     const [userRole, setUserRole] = useState(null); // Track user role
     const lastStatusesRef = useRef({}); // Ref to avoid stale closure
+    const lastStrikeCountRef = useRef(null);
     const lastCountsRef = useRef({ reports: 0, appeals: 0 });
+    const citizenPollInFlightRef = useRef(false);
+    const adminPollInFlightRef = useRef(false);
+    const authorityPollInFlightRef = useRef(false);
+    const userRoleRef = useRef(null);
+    const currentUidRef = useRef(null);
+    const authorityCompanyIdRef = useRef(null);
+    const historyRef = useRef([]);
+    const adminHistoryRef = useRef([]);
+    const authorityHistoryRef = useRef([]);
+    const [citizenBootstrapReady, setCitizenBootstrapReady] = useState(false);
+    const citizenBootstrapReadyRef = useRef(false);
 
-    const setNavigation = (nav) => {
+    const setNavigation = useCallback((nav) => {
         navigation.current = nav;
+    }, []);
+
+    useEffect(() => {
+        userRoleRef.current = userRole;
+    }, [userRole]);
+
+    useEffect(() => {
+        currentUidRef.current = currentUid;
+    }, [currentUid]);
+
+    useEffect(() => {
+        authorityCompanyIdRef.current = authorityCompanyId;
+    }, [authorityCompanyId]);
+
+    useEffect(() => {
+        historyRef.current = history;
+    }, [history]);
+
+    useEffect(() => {
+        adminHistoryRef.current = adminHistory;
+    }, [adminHistory]);
+
+    useEffect(() => {
+        authorityHistoryRef.current = authorityHistory;
+    }, [authorityHistory]);
+
+    useEffect(() => {
+        lastStrikeCountRef.current = lastStrikeCount;
+    }, [lastStrikeCount]);
+
+    useEffect(() => {
+        citizenBootstrapReadyRef.current = citizenBootstrapReady;
+    }, [citizenBootstrapReady]);
+
+    const getAuthorityCompanyId = (userData, fallback = null) => {
+        if (!userData || typeof userData !== 'object') return fallback;
+        const direct =
+            userData.authorityCompanyId ??
+            userData.companyId ??
+            userData?.Authority?.authorityCompanyId ??
+            userData?.authority?.authorityCompanyId;
+
+        if (direct === null || direct === undefined || direct === '') {
+            return fallback;
+        }
+        return String(direct);
     };
 
     // Get user-specific storage key
@@ -59,26 +117,24 @@ export const NotificationProvider = ({ children }) => {
         try {
             const key = getStorageKey('notificationHistory', uid);
             const historyStr = await AsyncStorage.getItem(key);
-            if (historyStr) setHistory(JSON.parse(historyStr));
-            else setHistory([]); // Clear if no history for this user
+            return historyStr ? JSON.parse(historyStr) : [];
         } catch (e) {
             console.error("Failed to load notification history", e);
+            return [];
         }
     };
 
     const loadAdminHistory = async (isUserAdmin) => {
         // CRITICAL: Only load admin history if user is actually an admin
         if (!isUserAdmin) {
-            //console.log('NotificationContext: Skipping admin history load - user is not admin');
-            setAdminHistory([]);
-            return;
+            return [];
         }
         try {
             const historyStr = await AsyncStorage.getItem('adminNotificationHistory');
-            if (historyStr) setAdminHistory(JSON.parse(historyStr));
-            else setAdminHistory([]);
+            return historyStr ? JSON.parse(historyStr) : [];
         } catch (e) {
             console.error('Failed to load admin notification history', e);
+            return [];
         }
     };
 
@@ -89,14 +145,27 @@ export const NotificationProvider = ({ children }) => {
             if (statusesStr) {
                 const loaded = JSON.parse(statusesStr);
                 console.log("NotificationContext: Loaded lastStatuses from storage:", loaded);
-                setLastStatuses(loaded);
-                lastStatusesRef.current = loaded; // Update ref
-            } else {
-                setLastStatuses({});
-                lastStatusesRef.current = {};
+                return loaded;
             }
+            return {};
         } catch (e) {
             console.error("Failed to load last statuses", e);
+            return {};
+        }
+    };
+
+    const loadLastStrikeCount = async (uid) => {
+        try {
+            const key = getStorageKey('lastStrikeCount', uid);
+            const stored = await AsyncStorage.getItem(key);
+            if (stored === null || stored === undefined) {
+                return null;
+            }
+            const parsed = parseInt(stored, 10);
+            return Number.isFinite(parsed) ? parsed : null;
+        } catch (e) {
+            console.error("Failed to load last strike count", e);
+            return null;
         }
     };
 
@@ -106,14 +175,12 @@ export const NotificationProvider = ({ children }) => {
             const countsStr = await AsyncStorage.getItem('adminLastCounts');
             if (countsStr) {
                 const loaded = JSON.parse(countsStr);
-                setLastCounts(loaded);
-                lastCountsRef.current = loaded; // CRITICAL: Update ref immediately
-                //console.log('NotificationContext: Loaded admin last counts:', loaded);
-            } else {
-                //console.log('NotificationContext: No previous admin counts found');
+                return loaded;
             }
+            return { reports: 0, appeals: 0 };
         } catch (e) {
             console.error('Failed to load admin last counts', e);
+            return { reports: 0, appeals: 0 };
         }
     };
 
@@ -135,15 +202,26 @@ export const NotificationProvider = ({ children }) => {
         }
     };
 
+    const saveLastStrikeCount = async (count, uid) => {
+        try {
+            const key = getStorageKey('lastStrikeCount', uid);
+            await AsyncStorage.setItem(key, String(count));
+        } catch (e) {
+            console.error("Failed to save last strike count", e);
+        }
+    };
+
     const addToHistory = async (newNotification, uid) => {
-        const updatedHistory = [newNotification, ...history].slice(0, 50); // Keep last 50
+        const updatedHistory = [newNotification, ...(historyRef.current || [])].slice(0, 50); // Keep last 50
+        historyRef.current = updatedHistory;
         setHistory(updatedHistory);
         const key = getStorageKey('notificationHistory', uid);
         await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
     };
 
     const addToAdminHistory = async (newNotification) => {
-        const updatedHistory = [newNotification, ...adminHistory].slice(0, 50); // Keep last 50
+        const updatedHistory = [newNotification, ...(adminHistoryRef.current || [])].slice(0, 50); // Keep last 50
+        adminHistoryRef.current = updatedHistory;
         setAdminHistory(updatedHistory);
         await AsyncStorage.setItem('adminNotificationHistory', JSON.stringify(updatedHistory));
     };
@@ -153,15 +231,16 @@ export const NotificationProvider = ({ children }) => {
         try {
             const key = `authorityNotificationHistory_${companyId}`;
             const historyStr = await AsyncStorage.getItem(key);
-            if (historyStr) setAuthorityHistory(JSON.parse(historyStr));
-            else setAuthorityHistory([]);
+            return historyStr ? JSON.parse(historyStr) : [];
         } catch (e) {
             console.error('Failed to load authority notification history', e);
+            return [];
         }
     };
 
     const addToAuthorityHistory = async (newNotification, companyId) => {
-        const updatedHistory = [newNotification, ...authorityHistory].slice(0, 50);
+        const updatedHistory = [newNotification, ...(authorityHistoryRef.current || [])].slice(0, 50);
+        authorityHistoryRef.current = updatedHistory;
         setAuthorityHistory(updatedHistory);
         const key = `authorityNotificationHistory_${companyId}`;
         await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
@@ -172,17 +251,14 @@ export const NotificationProvider = ({ children }) => {
             const key = companyId ? `authorityLastAssignmentCount_${companyId}` : 'authorityLastAssignmentCount';
             const countStr = await AsyncStorage.getItem(key);
             if (countStr) {
-                const count = parseInt(countStr);
-                setLastAssignmentCount(count);
-                lastAssignmentCountRef.current = count;
-                //console.log('NotificationContext: Loaded last assignment count:', count, 'for company:', companyId);
-            } else {
-                console.log('NotificationContext: No previous assignment count found for company:', companyId);
-                setLastAssignmentCount(0);
-                lastAssignmentCountRef.current = 0;
+                const count = parseInt(countStr, 10);
+                return Number.isFinite(count) ? count : 0;
             }
+            console.log('NotificationContext: No previous assignment count found for company:', companyId);
+            return 0;
         } catch (e) {
             console.error('Failed to load last assignment count', e);
+            return 0;
         }
     };
 
@@ -209,9 +285,16 @@ export const NotificationProvider = ({ children }) => {
             setHistory([]);
             setAdminHistory([]);
             setAuthorityHistory([]);
+            historyRef.current = [];
+            adminHistoryRef.current = [];
+            authorityHistoryRef.current = [];
+            setCitizenBootstrapReady(false);
+            citizenBootstrapReadyRef.current = false;
 
             setLastStatuses({});
             lastStatusesRef.current = {};
+            setLastStrikeCount(null);
+            lastStrikeCountRef.current = null;
 
             setLastCounts({ reports: 0, appeals: 0 });
             lastCountsRef.current = { reports: 0, appeals: 0 };
@@ -221,9 +304,15 @@ export const NotificationProvider = ({ children }) => {
 
             setCurrentUid(null);
             setUserRole(null); // Setting to null stops all polling effects
+            currentUidRef.current = null;
+            userRoleRef.current = null;
             setIsAdmin(false);
             setIsAuthority(false);
             setAuthorityCompanyId(null);
+            authorityCompanyIdRef.current = null;
+            citizenPollInFlightRef.current = false;
+            adminPollInFlightRef.current = false;
+            authorityPollInFlightRef.current = false;
 
             // 2. Clear relevant AsyncStorage keys
             const keysToRemove = [
@@ -247,16 +336,18 @@ export const NotificationProvider = ({ children }) => {
     };
 
     // Use a function that can be called to refresh user state from storage
-    const refreshUser = async () => {
+    const refreshUser = useCallback(async () => {
         try {
             const userDataStr = await AsyncStorage.getItem('userData');
             const authCompanyIdFromStorage = await AsyncStorage.getItem('authorityCompanyId');
+            const previousRole = userRoleRef.current;
+            const previousUid = currentUidRef.current;
 
             console.log('NotificationProvider: Refreshing user state. metadata:', {
                 hasUserData: !!userDataStr,
                 hasAuthCompanyId: !!authCompanyIdFromStorage,
-                prevRole: userRole,
-                prevUid: currentUid
+                prevRole: previousRole,
+                prevUid: previousUid
             });
 
             if (userDataStr) {
@@ -267,29 +358,59 @@ export const NotificationProvider = ({ children }) => {
                 if (!uid) uid = userData.id || userData.uid;
 
                 const role = userData.role || 'citizen';
-                const compId = (role === 'authority') ? (userData.id || authCompanyIdFromStorage) : null;
+                const compId = role === 'authority'
+                    ? getAuthorityCompanyId(userData, authCompanyIdFromStorage)
+                    : null;
 
                 console.log('NotificationProvider: New state targets:', { role, uid, compId });
 
                 // Always set these to ensure context is in sync with latest storage
                 setCurrentUid(uid);
                 setUserRole(role);
+                currentUidRef.current = uid;
+                userRoleRef.current = role;
                 setIsAdmin(role === 'admin');
                 setIsAuthority(role === 'authority');
 
-                if (compId && compId !== authorityCompanyId) {
-                    console.log('NotificationProvider: Setting authority company ID:', compId);
-                    setAuthorityCompanyId(compId);
+                if (role !== 'citizen' || uid !== previousUid) {
+                    setCitizenBootstrapReady(false);
+                    citizenBootstrapReadyRef.current = false;
+                }
+
+                const previousCompanyId = authorityCompanyIdRef.current;
+                if (role === 'authority' && compId) {
+                    if (previousCompanyId !== compId) {
+                        console.log('NotificationProvider: Setting authority company ID:', compId);
+                        setAuthorityCompanyId(compId);
+                        authorityCompanyIdRef.current = compId;
+                    }
+                    await AsyncStorage.setItem('authorityCompanyId', String(compId));
+                } else {
+                    if (previousCompanyId !== null) {
+                        setAuthorityCompanyId(null);
+                        authorityCompanyIdRef.current = null;
+                    }
+                }
+
+                if (previousRole && previousRole !== role) {
+                    // Prevent stale toasts from previous role sessions.
+                    setNotification(null);
+                    setAdminNotification(null);
+                    setAuthorityNotification(null);
                 }
 
                 // Reset histories if user ID changed
-                if (uid && uid !== currentUid) {
+                if (uid && uid !== previousUid) {
                     console.log('NotificationProvider: UID changed, clearing citizen/authority histories only (preserving admin)');
                     setHistory([]);
+                    historyRef.current = [];
                     // DO NOT CLEAR adminHistory - it should persist across logout/login
                     setAuthorityHistory([]);
+                    authorityHistoryRef.current = [];
                     setLastStatuses({});
                     lastStatusesRef.current = {};
+                    setLastStrikeCount(null);
+                    lastStrikeCountRef.current = null;
                     // DO NOT CLEAR lastCounts - admin counts should persist
                     setLastAssignmentCount(0);
                     lastAssignmentCountRef.current = 0;
@@ -298,62 +419,161 @@ export const NotificationProvider = ({ children }) => {
                 // No user logged in in storage
                 console.log('NotificationProvider: No user data in storage, resetting to guest/citizen (preserving admin history)');
                 setCurrentUid(null);
-                setUserRole('citizen');
+                setUserRole(null);
                 setIsAdmin(false);
                 setIsAuthority(false);
                 setAuthorityCompanyId(null);
+                currentUidRef.current = null;
+                userRoleRef.current = null;
+                authorityCompanyIdRef.current = null;
+                setCitizenBootstrapReady(false);
+                citizenBootstrapReadyRef.current = false;
                 // Clear citizen and authority states only
                 setHistory([]);
+                historyRef.current = [];
                 // DO NOT CLEAR adminHistory - it should persist even when logged out
                 setAuthorityHistory([]);
+                authorityHistoryRef.current = [];
                 setLastStatuses({});
                 lastStatusesRef.current = {};
+                setLastStrikeCount(null);
+                lastStrikeCountRef.current = null;
                 // Keep admin counts for when admin logs back in
                 setLastAssignmentCount(0);
                 lastAssignmentCountRef.current = 0;
+                setNotification(null);
+                setAuthorityNotification(null);
+                setAdminNotification(null);
             }
         } catch (error) {
             console.error('NotificationProvider: Error refreshing user:', error);
         }
-    };
+    }, []);
 
     // Initial load and refresh on mount
     useEffect(() => {
         refreshUser();
-    }, []);
+    }, [refreshUser]);
 
     // Load citizen-specific data when currentUid changes
     useEffect(() => {
-        if (currentUid && userRole === 'citizen') {
-            loadHistory(currentUid);
-            loadLastStatuses(currentUid);
-        } else if (!currentUid) {
-            setHistory([]);
-            setLastStatuses({});
-            lastStatusesRef.current = {};
-        }
+        let cancelled = false;
+        const bootstrapCitizenState = async () => {
+            if (currentUid && userRole === 'citizen') {
+                setCitizenBootstrapReady(false);
+                citizenBootstrapReadyRef.current = false;
+                const [loadedHistory, loadedStatuses, loadedStrikeCount] = await Promise.all([
+                    loadHistory(currentUid),
+                    loadLastStatuses(currentUid),
+                    loadLastStrikeCount(currentUid),
+                ]);
+
+                let baselineStrikeCount = loadedStrikeCount;
+                if (baselineStrikeCount === null) {
+                    try {
+                        const moderationRes = await api.get(`/moderation/my-strikes/${currentUid}`);
+                        const parsed = parseInt(moderationRes?.data?.strikes, 10);
+                        baselineStrikeCount = Number.isFinite(parsed) ? parsed : null;
+                        if (baselineStrikeCount !== null) {
+                            await saveLastStrikeCount(baselineStrikeCount, currentUid);
+                        }
+                    } catch (e) {
+                        baselineStrikeCount = null;
+                    }
+                }
+
+                if (!cancelled && currentUidRef.current === currentUid && userRoleRef.current === 'citizen') {
+                    setHistory(loadedHistory);
+                    historyRef.current = loadedHistory;
+                    setLastStatuses(loadedStatuses);
+                    lastStatusesRef.current = loadedStatuses;
+                    setLastStrikeCount(baselineStrikeCount);
+                    lastStrikeCountRef.current = baselineStrikeCount;
+                    setCitizenBootstrapReady(true);
+                    citizenBootstrapReadyRef.current = true;
+                }
+            } else {
+                setCitizenBootstrapReady(false);
+                citizenBootstrapReadyRef.current = false;
+                setHistory([]);
+                historyRef.current = [];
+                setLastStatuses({});
+                lastStatusesRef.current = {};
+                setLastStrikeCount(null);
+                lastStrikeCountRef.current = null;
+            }
+
+            if (userRole !== 'citizen') {
+                setNotification(null);
+            }
+        };
+
+        bootstrapCitizenState();
+        return () => {
+            cancelled = true;
+        };
     }, [currentUid, userRole]);
 
     // Load admin-specific data when isAdmin or userRole changes
     useEffect(() => {
-        if (isAdmin && userRole === 'admin') {
-            loadLastCounts();
-            loadAdminHistory(true);
-        } else {
-            setAdminHistory([]);
-            setLastCounts({ reports: 0, appeals: 0 });
-        }
+        let cancelled = false;
+        const bootstrapAdminState = async () => {
+            if (isAdmin && userRole === 'admin') {
+                const [loadedCounts, loadedHistory] = await Promise.all([
+                    loadLastCounts(),
+                    loadAdminHistory(true),
+                ]);
+
+                if (!cancelled && userRoleRef.current === 'admin') {
+                    setLastCounts(loadedCounts);
+                    lastCountsRef.current = loadedCounts;
+                    setAdminHistory(loadedHistory);
+                    adminHistoryRef.current = loadedHistory;
+                }
+            } else {
+                setAdminHistory([]);
+                adminHistoryRef.current = [];
+                setLastCounts({ reports: 0, appeals: 0 });
+                lastCountsRef.current = { reports: 0, appeals: 0 };
+                setAdminNotification(null);
+            }
+        };
+
+        bootstrapAdminState();
+        return () => {
+            cancelled = true;
+        };
     }, [isAdmin, userRole]);
 
     // Load authority-specific data when isAuthority, userRole, or authorityCompanyId changes
     useEffect(() => {
-        if (isAuthority && userRole === 'authority' && authorityCompanyId) {
-            loadAuthorityHistory(authorityCompanyId);
-            loadLastAssignmentCount(authorityCompanyId);
-        } else {
-            setAuthorityHistory([]);
-            setLastAssignmentCount(0);
-        }
+        let cancelled = false;
+        const bootstrapAuthorityState = async () => {
+            if (isAuthority && userRole === 'authority' && authorityCompanyId) {
+                const [loadedHistory, loadedAssignmentCount] = await Promise.all([
+                    loadAuthorityHistory(authorityCompanyId),
+                    loadLastAssignmentCount(authorityCompanyId),
+                ]);
+
+                if (!cancelled && userRoleRef.current === 'authority' && authorityCompanyIdRef.current === authorityCompanyId) {
+                    setAuthorityHistory(loadedHistory);
+                    authorityHistoryRef.current = loadedHistory;
+                    setLastAssignmentCount(loadedAssignmentCount);
+                    lastAssignmentCountRef.current = loadedAssignmentCount;
+                }
+            } else {
+                setAuthorityHistory([]);
+                authorityHistoryRef.current = [];
+                setLastAssignmentCount(0);
+                lastAssignmentCountRef.current = 0;
+                setAuthorityNotification(null);
+            }
+        };
+
+        bootstrapAuthorityState();
+        return () => {
+            cancelled = true;
+        };
     }, [isAuthority, userRole, authorityCompanyId]);
 
 
@@ -368,42 +588,71 @@ export const NotificationProvider = ({ children }) => {
         }
 
         // CRITICAL: Only poll complaints for citizens
-        if (userRole !== 'citizen' || !currentUid) {
+        const role = userRoleRef.current;
+        const uid = currentUidRef.current;
+        if (role !== 'citizen' || !uid) {
             //console.log("NotificationContext: Skipping complaint polling - user is", userRole, "or no UID");
             return;
         }
+        if (!citizenBootstrapReadyRef.current) {
+            return;
+        }
+
+        if (citizenPollInFlightRef.current) {
+            return;
+        }
+        citizenPollInFlightRef.current = true;
 
         // console.log("NotificationContext: Polling for user:", currentUid);
 
         try {
-            const response = await api.get(`/complaints/citizen/${currentUid}`);
+            const [response, moderationResponse] = await Promise.all([
+                api.get(`/complaints/citizen/${uid}?page=1&limit=100`),
+                api.get(`/moderation/my-strikes/${uid}`).catch((err) => {
+                    console.error("NotificationContext: Failed to fetch strike info", err?.message || err);
+                    return null;
+                }),
+            ]);
             const complaints = response.data.complaints || [];
+            const parsedStrikes = parseInt(moderationResponse?.data?.strikes, 10);
+            const currentStrikeCount = Number.isFinite(parsedStrikes) ? parsedStrikes : null;
             //console.log("NotificationContext: Fetched", complaints.length, "complaints");
+
+            // Guard against role switching while request is in flight.
+            if (userRoleRef.current !== 'citizen' || currentUidRef.current !== uid) {
+                return;
+            }
 
             // Check for status changes using ref to avoid stale closure
             const newStatuses = {};
-            let changedComplaint = null;
+            const changedComplaints = [];
+            const previousStatuses = lastStatusesRef.current || {};
 
             complaints.forEach(c => {
                 newStatuses[c.id] = c.currentStatus;
 
                 // If we have a previous status and it's different
-                if (lastStatusesRef.current[c.id] && lastStatusesRef.current[c.id] !== c.currentStatus) {
-                    //console.log(`NotificationContext: Status changed for complaint ${c.id}: ${lastStatusesRef.current[c.id]} -> ${c.currentStatus}`);
-                    changedComplaint = c;
+                if (previousStatuses[c.id] && previousStatuses[c.id] !== c.currentStatus) {
+                    //console.log(`NotificationContext: Status changed for complaint ${c.id}: ${previousStatuses[c.id]} -> ${c.currentStatus}`);
+                    changedComplaints.push(c);
                 }
             });
 
+            // Detect appealed complaints that disappeared (deleted by admin moderation).
+            const currentComplaintIds = new Set(complaints.map(c => String(c.id)));
+            const deletedAppealedComplaintIds = Object.entries(previousStatuses)
+                .filter(([complaintId, status]) => status === 'appealed' && !currentComplaintIds.has(String(complaintId)))
+                .map(([complaintId]) => complaintId);
+
             // Update stored statuses
-            const updated = { ...lastStatusesRef.current, ...newStatuses };
+            const updated = { ...newStatuses };
             console.log("NotificationContext: Updated lastStatuses:", updated);
             setLastStatuses(updated);
             lastStatusesRef.current = updated; // Update ref
-            saveLastStatuses(updated, currentUid); // Persist to storage with user-specific key
+            saveLastStatuses(updated, uid); // Persist to storage with user-specific key
 
             // Trigger notification if changed
-            if (changedComplaint) {
-                console.log("NotificationContext: Triggering notification for complaint", changedComplaint.id);
+            if (changedComplaints.length > 0) {
                 const statusMap = {
                     'pending': 'Pending',
                     'accepted': 'Accepted',
@@ -411,35 +660,103 @@ export const NotificationProvider = ({ children }) => {
                     'resolved': 'Resolved',
                     'rejected': 'Rejected'
                 };
-                const readableStatus = statusMap[changedComplaint.currentStatus] || changedComplaint.currentStatus;
+                for (const changedComplaint of changedComplaints) {
+                    console.log("NotificationContext: Triggering notification for complaint", changedComplaint.id);
+                    const readableStatus = statusMap[changedComplaint.currentStatus] || changedComplaint.currentStatus;
 
-                const notifData = {
-                    id: changedComplaint.id, // Complaint ID
-                    uniqId: Date.now().toString(), // Unique ID for list
-                    title: 'Status Update',
-                    message: `Complaint #${changedComplaint.id} is now ${readableStatus}`,
-                    timestamp: new Date().toISOString(),
-                    complaint: changedComplaint,
-                    read: false,
-                    type: 'status_update'
-                };
+                    const notifData = {
+                        id: changedComplaint.id, // Complaint ID
+                        uniqId: `${changedComplaint.id}_${Date.now()}`, // Unique ID for list
+                        title: 'Status Update',
+                        message: `Complaint #${changedComplaint.id} is now ${readableStatus}`,
+                        timestamp: new Date().toISOString(),
+                        complaint: changedComplaint,
+                        read: false,
+                        type: 'status_update'
+                    };
 
-                showNotification(notifData);
-                addToHistory(notifData, currentUid);
+                    showNotification(notifData);
+                    await addToHistory(notifData, uid);
+                }
             } else {
                 console.log("NotificationContext: No status changes detected");
             }
 
+            if (currentStrikeCount !== null) {
+                const previousStrikeCount = lastStrikeCountRef.current;
+
+                // First valid read becomes baseline; no retroactive notification.
+                if (previousStrikeCount === null) {
+                    if (deletedAppealedComplaintIds.length > 0 && currentStrikeCount > 0) {
+                        const previewIds = deletedAppealedComplaintIds.slice(0, 2).join(', #');
+                        const extraCount = deletedAppealedComplaintIds.length - Math.min(deletedAppealedComplaintIds.length, 2);
+                        const moreText = extraCount > 0 ? ` and ${extraCount} more` : '';
+                        const warningSuffix = currentStrikeCount >= 4
+                            ? ' Warning: one more strike may lead to permanent suspension.'
+                            : ' Please follow community guidelines to avoid further action.';
+
+                        const strikeNotif = {
+                            uniqId: `strike_warning_${uid}_${Date.now()}`,
+                            title: 'Strike Warning',
+                            message: `Your appealed complaint${deletedAppealedComplaintIds.length > 1 ? 's' : ''} #${previewIds}${moreText} ${deletedAppealedComplaintIds.length > 1 ? 'were' : 'was'} removed by admin moderation. You now have ${currentStrikeCount}/5 strikes.${warningSuffix}`,
+                            timestamp: new Date().toISOString(),
+                            read: false,
+                            type: 'strike_warning',
+                        };
+                        showNotification(strikeNotif);
+                        await addToHistory(strikeNotif, uid);
+                    }
+
+                    setLastStrikeCount(currentStrikeCount);
+                    lastStrikeCountRef.current = currentStrikeCount;
+                    await saveLastStrikeCount(currentStrikeCount, uid);
+                } else if (currentStrikeCount > previousStrikeCount) {
+                    const delta = currentStrikeCount - previousStrikeCount;
+                    const warningSuffix = currentStrikeCount >= 4
+                        ? ' Warning: one more strike may lead to permanent suspension.'
+                        : ' Please follow community guidelines to avoid further action.';
+
+                    let message = `You received ${delta} moderation strike${delta > 1 ? 's' : ''}. Total strikes: ${currentStrikeCount}/5.${warningSuffix}`;
+                    if (deletedAppealedComplaintIds.length > 0) {
+                        const previewIds = deletedAppealedComplaintIds.slice(0, 2).join(', #');
+                        const extraCount = deletedAppealedComplaintIds.length - Math.min(deletedAppealedComplaintIds.length, 2);
+                        const moreText = extraCount > 0 ? ` and ${extraCount} more` : '';
+                        message = `Your appealed complaint${deletedAppealedComplaintIds.length > 1 ? 's' : ''} #${previewIds}${moreText} ${deletedAppealedComplaintIds.length > 1 ? 'were' : 'was'} removed by admin moderation. You now have ${currentStrikeCount}/5 strikes.${warningSuffix}`;
+                    }
+
+                    const strikeNotif = {
+                        uniqId: `strike_warning_${uid}_${Date.now()}`,
+                        title: 'Strike Warning',
+                        message,
+                        timestamp: new Date().toISOString(),
+                        read: false,
+                        type: 'strike_warning',
+                    };
+                    showNotification(strikeNotif);
+                    await addToHistory(strikeNotif, uid);
+
+                    setLastStrikeCount(currentStrikeCount);
+                    lastStrikeCountRef.current = currentStrikeCount;
+                    await saveLastStrikeCount(currentStrikeCount, uid);
+                } else if (currentStrikeCount !== previousStrikeCount) {
+                    setLastStrikeCount(currentStrikeCount);
+                    lastStrikeCountRef.current = currentStrikeCount;
+                    await saveLastStrikeCount(currentStrikeCount, uid);
+                }
+            }
+
         } catch (error) {
             // Only log errors for citizens (authorities/admins shouldn't poll complaints)
-            if (userRole === 'citizen') {
+            if (userRoleRef.current === 'citizen') {
                 console.error("Failed to fetch complaints", error);
             }
+        } finally {
+            citizenPollInFlightRef.current = false;
         }
     };
 
     useEffect(() => {
-        if (userRole !== 'citizen' || !currentUid) {
+        if (userRole !== 'citizen' || !currentUid || !citizenBootstrapReady) {
             //console.log("NotificationContext: Skipping citizen polling - user is", userRole, "or no UID");
             return;
         }
@@ -454,12 +771,12 @@ export const NotificationProvider = ({ children }) => {
             //console.log("NotificationContext: Stopping polling");
             clearInterval(interval);
         };
-    }, [currentUid, userRole]); // Re-run when user changes
+    }, [currentUid, userRole, citizenBootstrapReady]); // Re-run when user changes
 
     // Poll for admin data (reports and appeals)
     const pollAdminData = async () => {
         // CRITICAL: Double-check user role before polling
-        if (userRole !== 'admin') {
+        if (userRoleRef.current !== 'admin') {
             //console.log('AdminPolling: Skipping - user role is', userRole, 'not admin');
             return;
         }
@@ -472,6 +789,11 @@ export const NotificationProvider = ({ children }) => {
             //console.log('AdminPolling: Skipping - on unauthenticated screen:', currentRoute);
             return;
         }
+
+        if (adminPollInFlightRef.current) {
+            return;
+        }
+        adminPollInFlightRef.current = true;
 
         console.log('AdminPolling: Fetching reports and appeals...');
 
@@ -498,6 +820,7 @@ export const NotificationProvider = ({ children }) => {
             if (newReportEntries.length > 0) {
                 console.log('AdminPolling: Detected', newReportEntries.length, 'new reports');
                 newReportEntries.forEach((report, index) => {
+                    if (userRoleRef.current !== 'admin') return;
                     const notifData = {
                         uniqId: `admin_report_${report.id}_${Date.now()}`,
                         type: 'report',
@@ -525,6 +848,7 @@ export const NotificationProvider = ({ children }) => {
             if (newAppealEntries.length > 0) {
                 console.log('AdminPolling: Detected', newAppealEntries.length, 'new appeals');
                 newAppealEntries.forEach((appeal, index) => {
+                    if (userRoleRef.current !== 'admin') return;
                     const notifData = {
                         uniqId: `admin_appeal_${appeal.id}_${Date.now()}`,
                         type: 'appeal',
@@ -552,13 +876,17 @@ export const NotificationProvider = ({ children }) => {
 
         } catch (error) {
             console.error('Admin polling error:', error.message, error);
+        } finally {
+            adminPollInFlightRef.current = false;
         }
     };
 
     // Poll for authority assignments
     const pollAuthorityAssignments = async () => {
         // Double-check user role before polling
-        if (userRole !== 'authority' || !authorityCompanyId) {
+        const role = userRoleRef.current;
+        const companyId = authorityCompanyIdRef.current;
+        if (role !== 'authority' || !companyId) {
             console.log('AuthorityPolling: Skipping - user role is', userRole, 'not authority or no company ID');
             return;
         }
@@ -572,17 +900,28 @@ export const NotificationProvider = ({ children }) => {
             return;
         }
 
-        console.log('AuthorityPolling: Fetching assignments for company:', authorityCompanyId);
+        if (authorityPollInFlightRef.current) {
+            return;
+        }
+        authorityPollInFlightRef.current = true;
+
+        console.log('AuthorityPolling: Fetching assignments for company:', companyId);
 
         try {
             // Fetch complaints assigned to this authority
-            const response = await api.get(`/complaints/authority/${authorityCompanyId}`);
+            const response = await api.get(`/complaints/authority/${companyId}?page=1&limit=200`);
             const complaints = response.data?.complaints || [];
             const currentIds = complaints.map(c => c.id);
 
+            // Guard against role/company changes while request is in flight.
+            if (userRoleRef.current !== 'authority' || authorityCompanyIdRef.current !== companyId) {
+                return;
+            }
+
             // --- CHECK FOR DELETED COMPLAINTS ---
             // We compare current assigned IDs with what we previously knew
-            const lastKnownIdsStr = await AsyncStorage.getItem(`authorityAssignedIds_${authorityCompanyId}`);
+            const assignedIdsKey = `authorityAssignedIds_${companyId}`;
+            const lastKnownIdsStr = await AsyncStorage.getItem(assignedIdsKey);
             let lastKnownIds = lastKnownIdsStr ? JSON.parse(lastKnownIdsStr) : [];
 
             if (lastKnownIds.length > 0) {
@@ -600,19 +939,42 @@ export const NotificationProvider = ({ children }) => {
                             complaintId: id
                         };
                         showAuthorityNotification(notifData);
-                        addToAuthorityHistory(notifData, authorityCompanyId);
+                        addToAuthorityHistory(notifData, companyId);
                     });
                 }
             }
+
+            // Detect newly assigned complaints by ID diff (count-only checks miss replace-in-place cases).
+            const newEntries = complaints.filter(c => !lastKnownIds.includes(c.id));
+            if (newEntries.length > 0) {
+                newEntries.forEach(complaint => {
+                    if (userRoleRef.current !== 'authority') return;
+                    if (!(complaint.forwardedByAdmin === true && complaint.appealStatus === 'approved')) {
+                        const notifData = {
+                            uniqId: `authority_${complaint.id}_${Date.now()}`,
+                            title: 'New Assignment',
+                            message: `New complaint assigned: ${complaint.title}`,
+                            timestamp: new Date().toISOString(),
+                            read: false,
+                            type: 'assignment',
+                            complaintId: complaint.id,
+                            complaint: complaint
+                        };
+                        showAuthorityNotification(notifData);
+                        addToAuthorityHistory(notifData, companyId);
+                    }
+                });
+            }
+
             // Update last known IDs for next poll
-            await AsyncStorage.setItem(`authorityAssignedIds_${authorityCompanyId}`, JSON.stringify(currentIds));
+            await AsyncStorage.setItem(assignedIdsKey, JSON.stringify(currentIds));
 
             // --- CHECK FOR NEW ASSIGNMENTS OR FORWARDED APPEALS ---
             for (const complaint of complaints) {
                 const isForwarded = complaint.forwardedByAdmin === true && complaint.appealStatus === 'approved';
 
                 // Track status per complaint to detect updates
-                const statusKey = `authorityLastStatus_${authorityCompanyId}_${complaint.id}`;
+                const statusKey = `authorityLastStatus_${companyId}_${complaint.id}`;
                 const lastStatus = await AsyncStorage.getItem(statusKey);
                 const currentStatusStr = `${complaint.currentStatus}_${complaint.forwardedByAdmin}_${complaint.appealStatus}`;
 
@@ -631,7 +993,7 @@ export const NotificationProvider = ({ children }) => {
                             complaint: complaint
                         };
                         showAuthorityNotification(notifData);
-                        addToAuthorityHistory(notifData, authorityCompanyId);
+                        addToAuthorityHistory(notifData, companyId);
                     }
                 }
                 await AsyncStorage.setItem(statusKey, currentStatusStr);
@@ -640,41 +1002,16 @@ export const NotificationProvider = ({ children }) => {
             const currentCount = complaints.length;
             console.log('AuthorityPolling: Current assignment count:', currentCount);
 
-            // Initial count check logic for brand new IDs
-            const hasNewAssignments = currentCount > lastAssignmentCountRef.current;
-
-            if (hasNewAssignments) {
-                const diff = currentCount - lastKnownIds.length;
-                if (diff > 0) {
-                    const newEntries = complaints.filter(c => !lastKnownIds.includes(c.id));
-                    newEntries.forEach(complaint => {
-                        // Only trigger "New Assignment" if it's not a forwarded appeal (which we handle above)
-                        if (!(complaint.forwardedByAdmin === true && complaint.appealStatus === 'approved')) {
-                            const notifData = {
-                                uniqId: `authority_${complaint.id}_${Date.now()}`,
-                                title: 'New Assignment',
-                                message: `New complaint assigned: ${complaint.title}`,
-                                timestamp: new Date().toISOString(),
-                                read: false,
-                                type: 'assignment',
-                                complaintId: complaint.id,
-                                complaint: complaint
-                            };
-                            showAuthorityNotification(notifData);
-                            addToAuthorityHistory(notifData, authorityCompanyId);
-                        }
-                    });
-                }
-            }
-
             // Update stored count for simple threshold checks
             setLastAssignmentCount(currentCount);
             lastAssignmentCountRef.current = currentCount;
-            await saveLastAssignmentCount(currentCount, authorityCompanyId);
-            console.log('AuthorityPolling: Updated assignment count to:', currentCount, 'for company:', authorityCompanyId);
+            await saveLastAssignmentCount(currentCount, companyId);
+            console.log('AuthorityPolling: Updated assignment count to:', currentCount, 'for company:', companyId);
 
         } catch (error) {
             console.error('Authority polling error:', error.message, error);
+        } finally {
+            authorityPollInFlightRef.current = false;
         }
     };
 
@@ -721,7 +1058,7 @@ export const NotificationProvider = ({ children }) => {
 
     const showNotification = (notifData) => {
         // CRITICAL: Only show citizen notifications for citizens (not admins or authorities)
-        if (userRole !== 'citizen') {
+        if (userRoleRef.current !== 'citizen') {
             console.log("NotificationContext: Skipping citizen notification - user is", userRole);
             return;
         }
@@ -758,22 +1095,29 @@ export const NotificationProvider = ({ children }) => {
 
     const handlePress = () => {
         if (notification && navigation.current) {
-            navigation.current.navigate('ComplaintDetails', { complaintId: notification.id });
+            if (notification.type === 'strike_warning') {
+                navigation.current.navigate('Profile');
+            } else if (notification.id) {
+                navigation.current.navigate('ComplaintDetails', { complaintId: notification.id });
+            }
             dismissNotification();
         }
     };
 
     const markAsRead = async (notifId) => {
-        const updatedHistory = history.map(n =>
+        const baseHistory = historyRef.current || [];
+        const updatedHistory = baseHistory.map(n =>
             n.uniqId === notifId ? { ...n, read: true } : n
         );
+        historyRef.current = updatedHistory;
         setHistory(updatedHistory);
-        const key = getStorageKey('notificationHistory', currentUid);
+        const key = getStorageKey('notificationHistory', currentUidRef.current);
         await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
     };
 
     const markAsUnread = async (notifId) => {
-        const updatedHistory = history.map(n =>
+        const baseHistory = historyRef.current || [];
+        const updatedHistory = baseHistory.map(n =>
             n.uniqId === notifId ? { ...n, read: false, timestamp: new Date().toISOString() } : n
         );
         // Sort to move unread notification to top
@@ -782,15 +1126,18 @@ export const NotificationProvider = ({ children }) => {
             if (a.read && !b.read) return 1;
             return new Date(b.timestamp) - new Date(a.timestamp);
         });
+        historyRef.current = sorted;
         setHistory(sorted);
-        const key = getStorageKey('notificationHistory', currentUid);
+        const key = getStorageKey('notificationHistory', currentUidRef.current);
         await AsyncStorage.setItem(key, JSON.stringify(sorted));
     };
 
     const markAllAsRead = async () => {
-        const updatedHistory = history.map(n => ({ ...n, read: true }));
+        const baseHistory = historyRef.current || [];
+        const updatedHistory = baseHistory.map(n => ({ ...n, read: true }));
+        historyRef.current = updatedHistory;
         setHistory(updatedHistory);
-        const key = getStorageKey('notificationHistory', currentUid);
+        const key = getStorageKey('notificationHistory', currentUidRef.current);
         await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
     };
 
@@ -800,7 +1147,7 @@ export const NotificationProvider = ({ children }) => {
 
         // CRITICAL: Only show notifications for admins (double check with both isAdmin and userRole)
         // Use userRole state primarily as it's more reliable after refreshes
-        if (userRole !== 'admin') {
+        if (userRoleRef.current !== 'admin') {
             console.log("AdminNotificationContext: Skipping notification - user is not admin. Role:", userRole);
             return;
         }
@@ -861,15 +1208,18 @@ export const NotificationProvider = ({ children }) => {
     };
 
     const markAdminAsRead = async (notifId) => {
-        const updatedHistory = adminHistory.map(n =>
+        const baseHistory = adminHistoryRef.current || [];
+        const updatedHistory = baseHistory.map(n =>
             n.uniqId === notifId ? { ...n, read: true } : n
         );
+        adminHistoryRef.current = updatedHistory;
         setAdminHistory(updatedHistory);
         await AsyncStorage.setItem('adminNotificationHistory', JSON.stringify(updatedHistory));
     };
 
     const markAdminAsUnread = async (notifId) => {
-        const updatedHistory = adminHistory.map(n =>
+        const baseHistory = adminHistoryRef.current || [];
+        const updatedHistory = baseHistory.map(n =>
             n.uniqId === notifId ? { ...n, read: false, timestamp: new Date().toISOString() } : n
         );
         // Sort to move unread notification to top
@@ -878,12 +1228,15 @@ export const NotificationProvider = ({ children }) => {
             if (a.read && !b.read) return 1;
             return new Date(b.timestamp) - new Date(a.timestamp);
         });
+        adminHistoryRef.current = sorted;
         setAdminHistory(sorted);
         await AsyncStorage.setItem('adminNotificationHistory', JSON.stringify(sorted));
     };
 
     const markAllAdminAsRead = async () => {
-        const updatedHistory = adminHistory.map(n => ({ ...n, read: true }));
+        const baseHistory = adminHistoryRef.current || [];
+        const updatedHistory = baseHistory.map(n => ({ ...n, read: true }));
+        adminHistoryRef.current = updatedHistory;
         setAdminHistory(updatedHistory);
         await AsyncStorage.setItem('adminNotificationHistory', JSON.stringify(updatedHistory));
     };
@@ -892,33 +1245,44 @@ export const NotificationProvider = ({ children }) => {
         setHistory([]);
         setAdminHistory([]);
         setAuthorityHistory([]);
-        await AsyncStorage.removeItem(getStorageKey('notificationHistory', currentUid));
+        historyRef.current = [];
+        adminHistoryRef.current = [];
+        authorityHistoryRef.current = [];
+        await AsyncStorage.removeItem(getStorageKey('notificationHistory', currentUidRef.current));
         await AsyncStorage.removeItem('adminNotificationHistory');
-        if (authorityCompanyId) {
-            await AsyncStorage.removeItem(`authorityNotificationHistory_${authorityCompanyId}`);
+        const companyId = authorityCompanyIdRef.current;
+        if (companyId) {
+            await AsyncStorage.removeItem(`authorityNotificationHistory_${companyId}`);
         }
         console.log('All notification histories cleared.');
     };
 
     // Delete individual notifications
     const deleteNotification = async (notifId) => {
-        const updatedHistory = history.filter(n => n.uniqId !== notifId);
+        const baseHistory = historyRef.current || [];
+        const updatedHistory = baseHistory.filter(n => n.uniqId !== notifId);
+        historyRef.current = updatedHistory;
         setHistory(updatedHistory);
-        const key = getStorageKey('notificationHistory', currentUid);
+        const key = getStorageKey('notificationHistory', currentUidRef.current);
         await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
     };
 
     const deleteAdminNotification = async (notifId) => {
-        const updatedHistory = adminHistory.filter(n => n.uniqId !== notifId);
+        const baseHistory = adminHistoryRef.current || [];
+        const updatedHistory = baseHistory.filter(n => n.uniqId !== notifId);
+        adminHistoryRef.current = updatedHistory;
         setAdminHistory(updatedHistory);
         await AsyncStorage.setItem('adminNotificationHistory', JSON.stringify(updatedHistory));
     };
 
     const deleteAuthorityNotification = async (notifId) => {
-        const updatedHistory = authorityHistory.filter(n => n.uniqId !== notifId);
+        const baseHistory = authorityHistoryRef.current || [];
+        const updatedHistory = baseHistory.filter(n => n.uniqId !== notifId);
+        authorityHistoryRef.current = updatedHistory;
         setAuthorityHistory(updatedHistory);
-        if (authorityCompanyId) {
-            const key = `authorityNotificationHistory_${authorityCompanyId}`;
+        const companyId = authorityCompanyIdRef.current;
+        if (companyId) {
+            const key = `authorityNotificationHistory_${companyId}`;
             await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
         }
     };
@@ -966,7 +1330,7 @@ export const NotificationProvider = ({ children }) => {
         console.log('showAuthorityNotification checks - isAuthority:', isAuthority, 'userRole:', userRole);
 
         // Only show notifications for authorities
-        if (userRole !== 'authority') {
+        if (userRoleRef.current !== 'authority') {
             console.log("AuthorityNotificationContext: Skipping notification - user is not authority. isAuthority:", isAuthority, "userRole:", userRole);
             return;
         }
@@ -1016,18 +1380,22 @@ export const NotificationProvider = ({ children }) => {
     };
 
     const markAuthorityAsRead = async (notifId) => {
-        const updatedHistory = authorityHistory.map(n =>
+        const baseHistory = authorityHistoryRef.current || [];
+        const updatedHistory = baseHistory.map(n =>
             n.uniqId === notifId ? { ...n, read: true } : n
         );
+        authorityHistoryRef.current = updatedHistory;
         setAuthorityHistory(updatedHistory);
-        if (authorityCompanyId) {
-            const key = `authorityNotificationHistory_${authorityCompanyId}`;
+        const companyId = authorityCompanyIdRef.current;
+        if (companyId) {
+            const key = `authorityNotificationHistory_${companyId}`;
             await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
         }
     };
 
     const markAuthorityAsUnread = async (notifId) => {
-        const updatedHistory = authorityHistory.map(n =>
+        const baseHistory = authorityHistoryRef.current || [];
+        const updatedHistory = baseHistory.map(n =>
             n.uniqId === notifId ? { ...n, read: false, timestamp: new Date().toISOString() } : n
         );
         // Re-sort to bring unread to top
@@ -1036,24 +1404,29 @@ export const NotificationProvider = ({ children }) => {
             if (a.read && !b.read) return 1;
             return new Date(b.timestamp) - new Date(a.timestamp);
         });
+        authorityHistoryRef.current = sortedHistory;
         setAuthorityHistory(sortedHistory);
-        if (authorityCompanyId) {
-            const key = `authorityNotificationHistory_${authorityCompanyId}`;
+        const companyId = authorityCompanyIdRef.current;
+        if (companyId) {
+            const key = `authorityNotificationHistory_${companyId}`;
             await AsyncStorage.setItem(key, JSON.stringify(sortedHistory));
         }
     };
 
     const markAllAuthorityAsRead = async () => {
-        const updatedHistory = authorityHistory.map(n => ({ ...n, read: true }));
+        const baseHistory = authorityHistoryRef.current || [];
+        const updatedHistory = baseHistory.map(n => ({ ...n, read: true }));
+        authorityHistoryRef.current = updatedHistory;
         setAuthorityHistory(updatedHistory);
-        if (authorityCompanyId) {
-            const key = `authorityNotificationHistory_${authorityCompanyId}`;
+        const companyId = authorityCompanyIdRef.current;
+        if (companyId) {
+            const key = `authorityNotificationHistory_${companyId}`;
             await AsyncStorage.setItem(key, JSON.stringify(updatedHistory));
         }
     };
 
     return (
-        <NotificationContext.Provider value={{ setNavigation, history, notification, markAsRead, markAsUnread, markAllAsRead, deleteNotification, logout, userRole }}>
+        <NotificationContext.Provider value={{ setNavigation, history, notification, markAsRead, markAsUnread, markAllAsRead, deleteNotification, logout, userRole, refreshUser }}>
             <AdminNotificationContext.Provider value={{
                 setNavigation,
                 adminHistory,
@@ -1083,8 +1456,14 @@ export const NotificationProvider = ({ children }) => {
                     {userRole === 'citizen' && notification && (
                         <Animated.View style={[styles.toastContainer, { opacity: fadeAnim }]}>
                             <TouchableOpacity style={styles.content} onPress={handlePress}>
-                                <View style={styles.iconBox}>
-                                    <Bell size={20} color="white" />
+                                <View style={[
+                                    styles.iconBox,
+                                    notification.type === 'strike_warning' && { backgroundColor: '#EF4444' }
+                                ]}>
+                                    {notification.type === 'strike_warning'
+                                        ? <AlertTriangle size={20} color="white" />
+                                        : <Bell size={20} color="white" />
+                                    }
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.title}>{notification.title}</Text>

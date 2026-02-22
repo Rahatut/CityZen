@@ -10,10 +10,12 @@ import axios from 'axios';
 import { auth } from '../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNotification } from '../context/NotificationContext';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function LoginScreen({ navigation }) {
+  const { refreshUser } = useNotification();
   // NOTE: Role state is kept for UI only; actual login role is fetched from DB
   const [role, setRole] = useState('citizen');
   const [email, setEmail] = useState('');
@@ -46,18 +48,35 @@ export default function LoginScreen({ navigation }) {
       });
 
       const userData = response.data; // This object contains the stored role, fullName, etc.
-      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+      const authorityCompanyId =
+        userData?.authorityCompanyId ??
+        userData?.companyId ??
+        userData?.Authority?.authorityCompanyId ??
+        userData?.authority?.authorityCompanyId ??
+        null;
+
+      const normalizedUserData = {
+        ...userData,
+        authorityCompanyId: authorityCompanyId ?? undefined,
+        companyId: authorityCompanyId ?? undefined,
+      };
 
       // Store user data in AsyncStorage for later use (upvotes, profile, etc.)
-      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+      await AsyncStorage.setItem('userData', JSON.stringify(normalizedUserData));
       await AsyncStorage.setItem('userToken', firebaseUser.uid); // Store Firebase UID as token
+      if (normalizedUserData.role === 'authority' && authorityCompanyId != null) {
+        await AsyncStorage.setItem('authorityCompanyId', String(authorityCompanyId));
+      }
+      if (refreshUser) {
+        await refreshUser();
+      }
 
       // 3. Navigation based on Role fetched from the database
       // Check App.js for the exact screen names
-      if (userData.role === 'admin') {
+      if (normalizedUserData.role === 'admin') {
         // Navigates to <Stack.Screen name="AdminDashboard" />
         navigation.replace('AdminDashboard');
-      } else if (userData.role === 'authority') {
+      } else if (normalizedUserData.role === 'authority') {
         // Navigates to <Stack.Screen name="AuthorityDashboard" />
         navigation.replace('AuthorityDashboard');
       } else {

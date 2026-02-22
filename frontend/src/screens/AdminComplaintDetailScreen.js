@@ -74,7 +74,8 @@ export default function AdminComplaintDetailScreen({ route, navigation, darkMode
                             Alert.alert('Success', 'Complaint deleted and strike issued.');
                             navigation.goBack();
                         } catch (err) {
-                            Alert.alert('Error', 'Failed to complete action.');
+                            const message = err?.response?.data?.message || err?.message || 'Failed to complete action.';
+                            Alert.alert('Error', `Failed to complete action: ${message}`);
                         }
                     }
                 }

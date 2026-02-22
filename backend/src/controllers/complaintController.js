@@ -1130,10 +1130,31 @@ exports.deleteComplaint = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const complaint = await Complaint.findByPk(id);
+    const complaint = await Complaint.findByPk(id, { transaction: t });
     if (!complaint) {
+      await t.rollback();
       return res.status(404).json({ message: 'Complaint not found.' });
     }
+
+    // Delete dependent rows first to avoid FK constraint failures on complaint delete.
+    await Promise.all([
+      ComplaintAssignment.destroy({
+        where: { complaintId: id },
+        transaction: t,
+      }),
+      ComplaintImages.destroy({
+        where: { complaintId: id },
+        transaction: t,
+      }),
+      ComplaintReport.destroy({
+        where: { complaintId: id },
+        transaction: t,
+      }),
+      Upvote.destroy({
+        where: { complaintId: id },
+        transaction: t,
+      }),
+    ]);
 
     await Complaint.destroy({
       where: { id },
@@ -1300,6 +1321,7 @@ exports.reportComplaint = async (req, res) => {
     }
 
     if (!complaintId || !reportedBy || !reason) {
+      await t.rollback();
       return res.status(400).json({
         message: 'Missing required fields: complaintId, reportedBy, reason'
       });
@@ -1321,6 +1343,7 @@ exports.reportComplaint = async (req, res) => {
     ];
 
     if (!validReasons.includes(reason)) {
+      await t.rollback();
       return res.status(400).json({
         message: `Invalid reason. Must be one of: ${validReasons.join(', ')}`
       });
@@ -1329,6 +1352,7 @@ exports.reportComplaint = async (req, res) => {
     // Check if complaint exists
     const complaint = await Complaint.findByPk(complaintId);
     if (!complaint) {
+      await t.rollback();
       return res.status(404).json({ message: 'Complaint not found' });
     }
 
@@ -1614,9 +1638,11 @@ exports.addEvidenceToComplaint = async (req, res) => {
     const imageFiles = req.files;
 
     if (!complaintId) {
+      await t.rollback();
       return res.status(400).json({ message: 'Complaint ID is required.' });
     }
     if (!imageFiles || imageFiles.length === 0) {
+      await t.rollback();
       return res.status(400).json({ message: 'Image files are required.' });
     }
 
@@ -1693,7 +1719,7 @@ exports.updateAppealStatus = async (req, res) => {
       });
     }
 
-    const complaint = await Complaint.findByPk(id);
+    const complaint = await Complaint.findByPk(id, { transaction: t });
     if (!complaint) {
       await t.rollback();
       return res.status(404).json({ message: 'Complaint not found' });

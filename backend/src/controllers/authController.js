@@ -12,6 +12,7 @@ exports.registerProfile = async (req, res) => {
     const { firebaseUid, email, fullName, role, ward, department, authorityCompanyId, adminCode } = req.body;
 
     if (!firebaseUid || !email || !fullName || !role) {
+      await t.rollback();
       return res.status(400).json({ message: 'Missing core identity fields.' });
     }
 
